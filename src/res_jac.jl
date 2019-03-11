@@ -24,7 +24,7 @@ struct Reservoir_Model{T, Tg<:AbstractArray}
     μ_w::T
     μ_o::T
 end
-Base.size(M::Reservoirmodel) = M.dim
+Base.size(M::Reservoir_Model) = M.dim
 
 function _residual_cell(m, Δt, g, g_prev, i, j, k;bth=true, p_bth=4000.0, maxinj = 10000.0)
 
@@ -195,7 +195,7 @@ function _residual_cell(m, Δt, g, g_prev, i, j, k;bth=true, p_bth=4000.0, maxin
     Φ_diff_w   = p_w_ijk-p_bth-m.ρ_w(p_w_ijk)*(m.z[i,j,k]-12001)/144
     well_o     = PI==0.0 ? 0.0 : PI*Φ_diff_o*m.k_r_o(S_w_ijk)*m.ρ_o(p_o_ijk)/m.μ_o
     well_w     = PI==0.0 ? 0.0 : PI*Φ_diff_w*m.k_r_w(S_w_ijk)*m.ρ_w(p_w_ijk)/m.μ_w
-
+    
     
     ###=====================================================================
     ### Calculate Residuals
@@ -231,8 +231,8 @@ function getresidual(m::Reservoir_Model, Δt, g::AbstractVector, g_prev::Abstrac
     for i in 1:Nx, j in 1:Ny, k in 1:Nz
         nd = (k-1) * Nx * Ny + (j-1) * Nx + i 
         input = (i==1 ? z : g[nd-1], j==1 ? z : g[nd-Nx], k==1 ? z : g[nd-Nx*Ny],
-                                                    g[nd], k==Nz ? z : g[nd+Nx*Ny], j==Ny ? z : g[nd+Nx], i==Nx ? z : g[nd+1]), g_prev[nd])
-        res[nd] = SVector{2}(_residual_cell(m, Δt, [input[i][j] for i in 1:7, j in 1:2], g_prev[nd]))
+                                                    g[nd], k==Nz ? z : g[nd+Nx*Ny], j==Ny ? z : g[nd+Nx], i==Nx ? z : g[nd+1])
+        res[nd] = SVector{2}(_residual_cell(m, Δt, [input[i][j] for i in 1:7, j in 1:2], g_prev[nd], i, j, k))
     end
     return res
 end
@@ -244,21 +244,20 @@ function _getjacobian_array(m::Reservoir_Model, Δt, g::AbstractVector, g_prev::
         nd = (k-1) * Nx * Ny + (j-1) * Nx + i 
         input = (i==1 ? z : g[nd-1], j==1 ? z : g[nd-Nx], k==1 ? z : g[nd-Nx*Ny],
                                                     g[nd], k==Nz ? z : g[nd+Nx*Ny], j==Ny ? z : g[nd+Nx], i==Nx ? z : g[nd+1])
-        J = ForwardDiff.jacobian(θ -> _residual_cell(m, Δt, θ, g_prev[nd], i, j, k), [input[i][j] for i in 1:7, j in 1:2])
-        
-        jacArray[1,nd] = @SMatrix(J[:,[1,8]])
-        jacArray[2,nd] = @SMatrix(J[:,[2,9]])
-        jacArray[3,nd] = @SMatrix(J[:,[3,10]])
-        jacArray[4,nd] = @SMatrix(J[:,[4,11]])
-        jacArray[5,nd] = @SMatrix(J[:,[5,12]])
-        jacArray[6,nd] = @SMatrix(J[:,[6,13]])
-        jacArray[7,nd] = @SMatrix(J[:,[7,14]])
+        J = ForwardDiff.jacobian(θ -> _residual_cell(m, Δt, θ, g_prev[nd], i, j, k), [input[a][b] for a in 1:7, b in 1:2])
+        jacArray[1,nd] = SMatrix{2,2}(J[:,[1,8]])
+        jacArray[2,nd] = SMatrix{2,2}(J[:,[2,9]])
+        jacArray[3,nd] = SMatrix{2,2}(J[:,[3,10]])
+        jacArray[4,nd] = SMatrix{2,2}(J[:,[4,11]])
+        jacArray[5,nd] = SMatrix{2,2}(J[:,[5,12]])
+        jacArray[6,nd] = SMatrix{2,2}(J[:,[6,13]])
+        jacArray[7,nd] = SMatrix{2,2}(J[:,[7,14]])
     end
     return jacArray
 end
 function getjacobian(m::Reservoir_Model, Δt, g::AbstractVector, g_prev::AbstractVector)
     Nx, Ny, Nz = size(m)
     jA = _getjacobian_array(m, Δt, g, g_prev)
-    return SparseMatrixDIA((-Nx*Ny => jA[3, Nx*Ny+1:end], -Nx => jA[2, Nx+1:end], -1 => jA[1, 2:end], 0 => jA[1, :],
+    return SparseMatrixDIA((-Nx*Ny => jA[3, Nx*Ny+1:end], -Nx => jA[2, Nx+1:end], -1 => jA[1, 2:end], 0 => jA[4, :],
             1 => jA[7, 1:end-1], Nx => jA[6, 1:end-Nx], Nx*Ny => jA[5, 1:end-Nx*Ny]), Nx*Ny*Nz, Nx*Ny*Nz)
 end

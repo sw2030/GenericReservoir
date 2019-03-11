@@ -1,4 +1,4 @@
-using LinearAlgebra, StaticArrays, CuArrays
+using LinearAlgebra, StaticArrays
 using HDF5
 
 porosity = h5read("spe10data.h5", "data/porosity")
@@ -26,7 +26,7 @@ Lx, Ly, Lz = 1200, 2200, 170
 z = [12000.0+2.0*k-1.0 for i in 1:60, j in 1:220, k in 1:85]
 # Top layer(k=1) z is 12001, end 12169
 ϕ = copy(porosity)
-k_d = set_grid(kraw, 7)
+k = set_grid(kraw, 7)
 
 Total = 5000.0
 q_oil   = zeros(Nx, Ny, Nz)
@@ -38,10 +38,10 @@ halfx, halfy = round(Int, Nx/2),round(Int, Ny/2)
 for i in 1:Nz ### Injector
     q_water[halfx,halfy,i] = -Total*(kx[halfx,halfy,i]/sum(kx[halfx,halfy,:]))
 end 
-m = Reservoirmodel(q_oil, q_water, (Δx, Δy, Δz), z, k, p_ref, C_r, ϕ_ref, ϕ, 
+m = Reservoir_Model((Nx, Ny, Nz), q_oil, q_water, (Δx, Δy, Δz), z, k, p_ref, C_r, ϕ_ref, ϕ, 
                 k_r_w, k_r_o, p_cow, C_water, C_oil, ρ_water, ρ_oil, μ_water, μ_oil); 
 
-g_guess  = fill(SVector{2}(6000.0, 2.0), Nx*Ny*Nz)
+g_guess  = fill(SVector{2}(6000.0, 0.2), Nx*Ny*Nz)
 
 function savedata(d, fname, timestep) 
     h5write(string(fname, ".h5"), string("Data/",timestep), cat(Array(d[1][1].A), Array(d[1][2].A);dims = 4))
