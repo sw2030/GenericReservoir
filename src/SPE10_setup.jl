@@ -41,8 +41,8 @@ end
 m = Reservoir_Model((Nx, Ny, Nz), q_oil, q_water, (Δx, Δy, Δz), z, k, p_ref, C_r, ϕ_ref, ϕ, 
                 k_r_w, k_r_o, p_cow, C_water, C_oil, ρ_water, ρ_oil, μ_water, μ_oil); 
 
-g_guess  = fill(SVector{2}(6000.0, 0.2), Nx*Ny*Nz)
-
+g_guess  = fill(SVector{2}(6000.0, 0.2), Nx*Ny*Nz);
+#=
 function savedata(d, fname, timestep) 
     h5write(string(fname, ".h5"), string("Data/",timestep), cat(Array(d[1][1].A), Array(d[1][2].A);dims = 4))
     h5write(string(fname, ".h5"), string("Log/",timestep), d[2])
@@ -52,3 +52,5 @@ function loaddata(fname, timestep)
     d = h5read(string(fname, ".h5"), string("Data/",timestep))
     return (makegrid(distribute(d[:,:,:,1]),7), makegrid(distribute(d[:,:,:,2]),7))
 end
+=#
+;;
