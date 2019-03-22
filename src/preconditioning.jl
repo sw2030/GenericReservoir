@@ -1,4 +1,4 @@
-using DIA, LinearAlgebra
+using Main.DIA, LinearAlgebra
 
 function create_P_E(J::SparseMatrixDIA)
     P = SparseMatrixDIA((0=>inv.(J.diags[4].second),), J.m, J.n)
