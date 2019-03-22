@@ -1,4 +1,4 @@
-using ForwardDiff, StaticArrays, DIA
+using ForwardDiff, StaticArrays, Main.DIA
 
 ## General Node convention - for coordinate i, j, k
 ## nd = (k-1) * Nx * Ny + (j-1) * Nx + i 
