@@ -1,4 +1,4 @@
-using ForwardDiff, DIA, CuArrays, CUDAnative
+using ForwardDiff, DIA, CuArrays, CUDAnative, StaticArrays
 
 
 ## General Node convention - for coordinate i, j, k
@@ -247,17 +247,16 @@ function getresidual(m::Reservoir_Model{T, Array{T,3}}, Δt, g::Array{T,1}, g_pr
     end
     return res
 end
+
 ## Residual GPU version
 function getresidual(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
     res = zero(g) #Later replace with similar
-    #inputchunk = CuArray(fill(Tuple(zeros(14)), size(m)...))
     _getresidual_prealloc(res, m, Δt, g, g_prev)
     return res
 end
 function _getresidual_prealloc(res::CuArray{T,1}, m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
     Nxx, Nyy, Nzz = size(m)
     
-    ## Passing in Function _residual_cell
     function kernel(f, res, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mp_ref, mC_r, mϕ_ref, mϕ, mk_r_w, mk_r_o, mp_cow, mC_w, mC_o, mρ_w, mρ_o, mμ_w, mμ_o, Δt, g, g_prev)
    	i = (blockIdx().x-1) * blockDim().x + threadIdx().x
         j = (blockIdx().y-1) * blockDim().y + threadIdx().y
@@ -287,7 +286,6 @@ function _getresidual_prealloc(res::CuArray{T,1}, m::Reservoir_Model{T, CuArray{
 	    res[2nd-1] = rw
 	    res[2nd] = ro
     	end
-
 	return
     end
     
@@ -299,10 +297,22 @@ function _getresidual_prealloc(res::CuArray{T,1}, m::Reservoir_Model{T, CuArray{
     blocks      = ceil.(Int, (Nxx, Nyy, Nzz) ./ threads)
 
     @cuda threads=threads blocks=blocks kernel(_residual_cell, res, m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.p_ref, m.C_r, m.ϕ_ref, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.C_w, m.C_o, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, Δt, g, g_prev)
-
+    return
 end
 
-
+###---------------------------------------------------------------------
+### Jacobian Calculation
+###---------------------------------------------------------------------
+## Jacobian for Regular Arrays
+function getjacobian(m::Reservoir_Model{T, Array{T,3}}, Δt, g::AbstractVector, g_prev::AbstractVector) where {T}
+    Nx, Ny, Nz = size(m)
+    Nxy = Nx*Ny
+    N = Nx*Ny*Nz
+    jA = _getjacobian_array(m, Δt, g, g_prev)
+    diagband = [-2Nxy-1, -2Nxy, -2Nxy+1, -2Nx-1, -2Nx, -2Nx+1, -3, -2, -1, 0, 1, 2, 3, 2Nx-1, 2Nx, 2Nx+1, 2Nxy-1, 2Nxy, 2Nxy+1]
+    diagidx  = [(diagband[i]<0) ? (-diagband[i]+1:2N) : (1:2N-diagband[i]) for i in 1:length(diagband)]
+    return SparseMatrixDIA(Tuple([diagband[i]=>jA[diagidx[i], i] for i in 1:length(diagband)]), 2N, 2N)
+end
 function _getjacobian_array(m::Reservoir_Model{T, Array{T,3}}, Δt, g::AbstractVector, g_prev::AbstractVector) where {T}
     Nx, Ny, Nz = size(m)
     z = zeros(2)
@@ -330,12 +340,56 @@ function _getjacobian_array(m::Reservoir_Model{T, Array{T,3}}, Δt, g::AbstractV
     end
     return jA
 end
-function getjacobian(m::Reservoir_Model, Δt, g::AbstractVector, g_prev::AbstractVector)
-    Nx, Ny, Nz = size(m)
-    Nxy = Nx*Ny
-    N = Nx*Ny*Nz
-    jA = _getjacobian_array(m, Δt, g, g_prev)
-    diagband = [-2Nxy-1, -2Nxy, -2Nxy+1, -2Nx-1, -2Nx, -2Nx+1, -3, -2, -1, 0, 1, 2, 3, 2Nx-1, 2Nx, 2Nx+1, 2Nxy-1, 2Nxy, 2Nxy+1]
-    diagidx  = [(diagband[i]<0) ? (-diagband[i]+1:2N) : (1:2N-diagband[i]) for i in 1:length(diagband)]
-    return SparseMatrixDIA(Tuple([diagband[i]=>jA[diagidx[i], i] for i in 1:length(diagband)]), 2N, 2N)
+## Jacobian for GPU Arrays
+function getjacobian(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
+	
 end
+function _getjacobian_array(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
+    Nx, Ny, Nz = size(m)
+    jA = CuArray(zeros(2*Nx*Ny*Nz, 19))
+    _getjacobian_array_prealloc(jA, m, Δt, g, g_prev)
+    return jA
+end
+function _getjacobian_array_prealloc(jA::CuArray{T,2}, m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
+    Nxx, Nyy, Nzz = size(m)
+    function kernel(f, jA, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mp_ref, mC_r, mϕ_ref, mϕ, mk_r_w, mk_r_o, mp_cow, mC_w, mC_o, mρ_w, mρ_o, mμ_w, mμ_o, Δt, g, g_prev)
+        i = (blockIdx().x-1) * blockDim().x + threadIdx().x
+        j = (blockIdx().y-1) * blockDim().y + threadIdx().y
+        k = (blockIdx().z-1) * blockDim().z + threadIdx().z
+
+        Nx, Ny, Nz = mdim
+        if i<=Nx && j<=Ny && k<=Nz
+            nd = (k-1) * Nx * Ny + (j-1) * Nx + i
+            #Since we are not allowed to allocate an input array inside CUDA kernel, we just do it elementwise here.
+            #The code below is the one we will duplicate elementwise
+            #input = [i==1 ? z : g[2nd-3:2nd-2], j==1 ? z : g[2nd-2Nx-1:2nd-2Nx], k==1 ? z : g[2nd-2*Nx*Ny-1:2nd-2Nx*Ny], g[2nd-1:2nd], k==Nz ? z : g[2nd+2*Nx*Ny-1:2nd+2*Nx*Ny], j==Ny ? z : g[2nd+2Nx-1:2nd+2Nx], i==Nx ? z : g[2nd+1:2nd+2]]
+            g1 = i==1 ? 0.0 : g[2nd-3]
+            g2 = i==1 ? 0.0 : g[2nd-2]
+            g3 = j==1 ? 0.0 : g[2nd-2Nx-1]
+            g4 = j==1 ? 0.0 : g[2nd-2Nx]
+            g5 = k==1 ? 0.0 : g[2nd-2*Nx*Ny-1]
+            g6 = k==1 ? 0.0 : g[2nd-2Nx*Ny]
+            g7 = g[2nd-1]
+            g8 = g[2nd]
+            g9 = k==Nz ? 0.0 : g[2nd+2*Nx*Ny-1]
+            g10 = k==Nz ? 0.0 : g[2nd+2*Nx*Ny]
+            g11 = j==Ny ? 0.0 : g[2nd+2Nx-1]
+            g12 = j==Ny ? 0.0 : g[2nd+2Nx]
+            g13 = i==Nx ? 0.0 : g[2nd+1]
+            g14 = i==Nx ? 0.0 : g[2nd+2]
+	    ginput = SVector{14}(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14)
+	    J = ForwardDiff.jacobian(g->SVector{2}(f(g[1], g[2], g[3], g[4], g[5], g[6], g[7], g[8], g[9], g[10], g[11], g[12], g[13], g[14], g_prev[2nd-1], g_prev[2nd], i, j, k, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mp_ref, mC_r, mϕ_ref, mϕ, mk_r_w, mk_r_o, mp_cow, mC_w, mC_o, mρ_w, mρ_o, mμ_w, mμ_o, Δt)), ginput)
+	end
+	return
+    end
+
+    max_threads = 256
+    threads_x   = min(max_threads, Nxx)
+    threads_y   = min(max_threads ÷ threads_x, Nyy)
+    threads_z   = min(max_threads ÷ threads_x ÷ threads_y, Nzz)
+    threads     = (threads_x, threads_y, threads_z)
+    blocks      = ceil.(Int, (Nxx, Nyy, Nzz) ./ threads)
+
+    @cuda threads=threads blocks=blocks kernel(_residual_cell, jA, m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.p_ref, m.C_r, m.ϕ_ref, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.C_w, m.C_o, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, Δt, g, g_prev)
+end
+	
