@@ -47,7 +47,7 @@ m = Reservoir_Model((Nx, Ny, Nz), q_oil, q_water, (Δx, Δy, Δz), z, k, logradi
                 k_r_w, k_r_o, p_cow, C_water, C_oil, ρ_water, ρ_oil, μ_water, μ_oil); 
 
 
-g_guess = [i%2==0 ? 0.2 : 6000.0 for i in 1:2*Nx*Ny*Nz];
+g = [i%2==0 ? 0.2 : 6000.0 for i in 1:2*Nx*Ny*Nz];
 #=
 function savedata(d, fname, timestep) 
     h5write(string(fname, ".h5"), string("Data/",timestep), cat(Array(d[1][1].A), Array(d[1][2].A);dims = 4))

@@ -23,14 +23,14 @@ function gmres(A, b, restrt::Int64; tol::Real=1e-5, maxiter::Int=200, ifprint=fa
         itersave = iter
         r = Q[1]
         copyto!(r, b)
-        BLAS.gemv!('N', -1, A, M(x), 1, r)
+        BLAS.gemv!('N', -1.0, A, M(x), 1.0, r)
         fill!(s, 0.0)
         s[1] = norm(r)
         rmul!(r, inv(s[1]))
         for i in 1:restrt
             isave = i
             w = Q[i+1]
-            BLAS.gemv!('N', 1, A, M(Q[i]), 0, w)
+            BLAS.gemv!('N', 1.0, A, M(Q[i]), 0.0, w)
             for k in 1:i
                 H[k,i] = LinearAlgebra.dot(w, Q[k])
                 LinearAlgebra.axpy!(-H[k,i],Q[k],w)
@@ -69,7 +69,7 @@ function gmres(A, b, restrt::Int64; tol::Real=1e-5, maxiter::Int=200, ifprint=fa
             LinearAlgebra.axpy!(y[k],Q[k],x)
         end
         copyto!(r, b)
-	BLAS.gemv!('N', -1, A, M(x), 1, r)
+	BLAS.gemv!('N', -1.0, A, M(x), 1.0, r)
         s[isave+1] = norm(r)
         err = s[isave+1]/bnrm2
         if err<=tol

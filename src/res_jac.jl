@@ -233,7 +233,9 @@ function _residual_cell(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, 
 end
 _residual_cell_pre(m, Δt, g, g_prev, i, j, k) = _residual_cell(g...,  g_prev[1], g_prev[2], i, j, k, m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.p_ref, m.C_r, m.ϕ_ref, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.C_w, m.C_o, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, Δt)
 
-
+###---------------------------------------------------------------------
+### Residual Assembly
+###---------------------------------------------------------------------
 ## Residual for Regular Arrays
 function getresidual(m::Reservoir_Model{T, Array{T,3}}, Δt, g::Array{T,1}, g_prev::Array{T,1}) where {T}
     Nx, Ny, Nz = size(m)
@@ -256,7 +258,6 @@ function getresidual(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, 
 end
 function _getresidual_prealloc(res::CuArray{T,1}, m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
     Nxx, Nyy, Nzz = size(m)
-    
     function kernel(f, res, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mp_ref, mC_r, mϕ_ref, mϕ, mk_r_w, mk_r_o, mp_cow, mC_w, mC_o, mρ_w, mρ_o, mμ_w, mμ_o, Δt, g, g_prev)
    	i = (blockIdx().x-1) * blockDim().x + threadIdx().x
         j = (blockIdx().y-1) * blockDim().y + threadIdx().y
@@ -301,58 +302,89 @@ function _getresidual_prealloc(res::CuArray{T,1}, m::Reservoir_Model{T, CuArray{
 end
 
 ###---------------------------------------------------------------------
-### Jacobian Calculation
+### Jacobian Assembly
 ###---------------------------------------------------------------------
 ## Jacobian for Regular Arrays
 function getjacobian(m::Reservoir_Model{T, Array{T,3}}, Δt, g::AbstractVector, g_prev::AbstractVector) where {T}
     Nx, Ny, Nz = size(m)
     Nxy = Nx*Ny
     N = Nx*Ny*Nz
-    jA = _getjacobian_array(m, Δt, g, g_prev)
-    diagband = [-2Nxy-1, -2Nxy, -2Nxy+1, -2Nx-1, -2Nx, -2Nx+1, -3, -2, -1, 0, 1, 2, 3, 2Nx-1, 2Nx, 2Nx+1, 2Nxy-1, 2Nxy, 2Nxy+1]
-    diagidx  = [(diagband[i]<0) ? (-diagband[i]+1:2N) : (1:2N-diagband[i]) for i in 1:length(diagband)]
-    return SparseMatrixDIA(Tuple([diagband[i]=>jA[diagidx[i], i] for i in 1:length(diagband)]), 2N, 2N)
+    jA, pA, eA = _getjacobian_array(m, Δt, g, g_prev)
+    diagbandj = [-2Nxy-1, -2Nxy, -2Nxy+1, -2Nx-1, -2Nx, -2Nx+1, -3, -2, -1, 0, 1, 2, 3, 2Nx-1, 2Nx, 2Nx+1, 2Nxy-1, 2Nxy, 2Nxy+1]
+    diagidxj  = [(diagbandj[i]<0) ? (-diagbandj[i]+1:2N) : (1:2N-diagbandj[i]) for i in 1:length(diagbandj)]
+    diagbandp = [-1, 0, 1]
+    diagidxp  = [(diagbandp[i]<0) ? (-diagbandp[i]+1:2N) : (1:2N-diagbandp[i]) for i in 1:length(diagbandp)]
+    diagbande = [-2Nxy-1, -2Nxy, -2Nxy+1, -2Nx-1, -2Nx, -2Nx+1, -3, -2, -1, 1, 2, 3, 2Nx-1, 2Nx, 2Nx+1, 2Nxy-1, 2Nxy, 2Nxy+1]
+    diagidxe  = [(diagbande[i]<0) ? (-diagbande[i]+1:2N) : (1:2N-diagbande[i]) for i in 1:length(diagbande)]
+    return SparseMatrixDIA(Tuple([diagbandj[i]=>jA[diagidxj[i], i] for i in 1:length(diagbandj)]), 2N, 2N), SparseMatrixDIA(Tuple([diagbandp[i]=>pA[diagidxp[i], i] for i in 1:length(diagbandp)]), 2N, 2N), SparseMatrixDIA(Tuple([diagbande[i]=>eA[diagidxe[i], i] for i in 1:length(diagbande)]), 2N, 2N)
 end
 function _getjacobian_array(m::Reservoir_Model{T, Array{T,3}}, Δt, g::AbstractVector, g_prev::AbstractVector) where {T}
     Nx, Ny, Nz = size(m)
     z = zeros(2)
     jA = zeros(2*Nx*Ny*Nz, 19)
+    pA = zeros(2*Nx*Ny*Nz, 3)
+    eA = zeros(2*Nx*Ny*Nz, 18)
     for i in 1:Nx, j in 1:Ny, k in 1:Nz
         nd = (k-1) * Nx * Ny + (j-1) * Nx + i 
         input = (i==1 ? z : g[2nd-3:2nd-2], j==1 ? z : g[2nd-2Nx-1:2nd-2Nx], k==1 ? z : g[2nd-2*Nx*Ny-1:2nd-2Nx*Ny],
                   g[2nd-1:2nd], k==Nz ? z : g[2nd+2*Nx*Ny-1:2nd+2*Nx*Ny], j==Ny ? z : g[2nd+2Nx-1:2nd+2Nx], i==Nx ? z : g[2nd+1:2nd+2])
 	J = ForwardDiff.jacobian(θ->[_residual_cell_pre(m, Δt, θ, g_prev[2nd-1:2nd], i, j, k)...], [input[a][b] for b in 1:2, a in 1:7][:])
 
-	jA[2*nd, 1:2]     .= J[2,5:6]
-	jA[2*nd-1, 2:3]   .= J[1,5:6]
-	jA[2*nd, 4:5]     .= J[2,3:4]
-	jA[2*nd-1, 5:6]   .= J[1,3:4]
-	jA[2*nd, 7:8]     .= J[2,1:2]
-	jA[2*nd-1, 8:9]   .= J[1,1:2]
-	jA[2*nd, 9:10]    .= J[2,7:8]
-	jA[2*nd-1, 10:11] .= J[1,7:8]
-	jA[2*nd, 11:12]   .= J[2,13:14]
-	jA[2*nd-1, 12:13] .= J[1,13:14]
-	jA[2*nd, 14:15]   .= J[2,11:12]
-	jA[2*nd-1, 15:16] .= J[1,11:12]
-	jA[2*nd, 17:18]   .= J[2,9:10]
-	jA[2*nd-1, 18:19] .= J[1,9:10]
+	jA[2nd, 1:2]     .= J[2,5:6]
+	jA[2nd-1, 2:3]   .= J[1,5:6]
+	jA[2nd, 4:5]     .= J[2,3:4]
+	jA[2nd-1, 5:6]   .= J[1,3:4]
+	jA[2nd, 7:8]     .= J[2,1:2]
+	jA[2nd-1, 8:9]   .= J[1,1:2]
+	jA[2nd, 9:10]    .= J[2,7:8]
+	jA[2nd-1, 10:11] .= J[1,7:8]
+	jA[2nd, 11:12]   .= J[2,13:14]
+	jA[2nd-1, 12:13] .= J[1,13:14]
+	jA[2nd, 14:15]   .= J[2,11:12]
+	jA[2nd-1, 15:16] .= J[1,11:12]
+	jA[2nd, 17:18]   .= J[2,9:10]
+	jA[2nd-1, 18:19] .= J[1,9:10]
+	## P, E Array for Preconditioner : A = P + E where P is the main block diagonal
+	Jcenter = J[1:2, 7:8]
+	Jcenterinv = inv(Jcenter)
+	pA[2nd, 1:2]   .= Jcenterinv[2, :]
+	pA[2nd-1, 2:3] .= Jcenterinv[1, :]
+	## Preallocate eA as a negative values of corners of main block diagonal
+	eA[2nd, 9] = -J[2, 7]
+	eA[2nd-1, 10] = -J[1, 8]
     end
-    return jA
+    eA[:, 1:9]   .+= view(jA, :, 1:9)
+    eA[:, 10:18] .+= view(jA, :, 11:19)
+	
+    return jA, pA, eA
 end
 ## Jacobian for GPU Arrays
 function getjacobian(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
-	
+    Nx, Ny, Nz = size(m)
+    Nxy = Nx*Ny
+    N = Nx*Ny*Nz
+    jA, pA, eA = _getjacobian_array(m, Δt, g, g_prev)
+    diagband = [-2Nxy-1, -2Nxy, -2Nxy+1, -2Nx-1, -2Nx, -2Nx+1, -3, -2, -1, 0, 1, 2, 3, 2Nx-1, 2Nx, 2Nx+1, 2Nxy-1, 2Nxy, 2Nxy+1]
+    diagidx  = [(diagband[i]<0) ? (-diagband[i]+1:2N) : (1:2N-diagband[i]) for i in 1:length(diagband)]
+    diagbandp = [-1, 0, 1]
+    diagidxp  = [(diagbandp[i]<0) ? (-diagbandp[i]+1:2N) : (1:2N-diagbandp[i]) for i in 1:length(diagbandp)]
+    diagbande = [-2Nxy-1, -2Nxy, -2Nxy+1, -2Nx-1, -2Nx, -2Nx+1, -3, -2, -1, 1, 2, 3, 2Nx-1, 2Nx, 2Nx+1, 2Nxy-1, 2Nxy, 2Nxy+1]
+    diagidxe  = [(diagbande[i]<0) ? (-diagbande[i]+1:2N) : (1:2N-diagbande[i]) for i in 1:length(diagbande)]
+    return SparseMatrixDIA(Tuple([diagband[i]=>view(jA, diagidx[i], i) for i in 1:length(diagband)]), 2N, 2N), SparseMatrixDIA(Tuple([diagbandp[i]=>view(pA, diagidxp[i], i) for i in 1:length(diagbandp)]), 2N, 2N), SparseMatrixDIA(Tuple([diagbande[i]=>view(eA, diagidxe[i], i) for i in 1:length(diagbande)]), 2N, 2N)
 end
 function _getjacobian_array(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
     Nx, Ny, Nz = size(m)
     jA = CuArray(zeros(2*Nx*Ny*Nz, 19))
-    _getjacobian_array_prealloc(jA, m, Δt, g, g_prev)
-    return jA
+    pA = CuArray(zeros(2*Nx*Ny*Nz, 3))
+    eA = CuArray(zeros(2*Nx*Ny*Nz, 18))
+    _getjacobian_array_prealloc(jA, pA, eA, m, Δt, g, g_prev)
+    eA[:, 1:9]   .+= view(jA, :, 1:9)
+    eA[:, 10:18] .+= view(jA, :, 11:19)
+    return jA, pA, eA
 end
-function _getjacobian_array_prealloc(jA::CuArray{T,2}, m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
+function _getjacobian_array_prealloc(jA::CuArray{T,2}, pA::CuArray{T,2}, eA::CuArray{T,2}, m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
     Nxx, Nyy, Nzz = size(m)
-    function kernel(f, jA, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mp_ref, mC_r, mϕ_ref, mϕ, mk_r_w, mk_r_o, mp_cow, mC_w, mC_o, mρ_w, mρ_o, mμ_w, mμ_o, Δt, g, g_prev)
+    function kernel(f, jA, pA, eA, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mp_ref, mC_r, mϕ_ref, mϕ, mk_r_w, mk_r_o, mp_cow, mC_w, mC_o, mρ_w, mρ_o, mμ_w, mμ_o, Δt, g, g_prev)
         i = (blockIdx().x-1) * blockDim().x + threadIdx().x
         j = (blockIdx().y-1) * blockDim().y + threadIdx().y
         k = (blockIdx().z-1) * blockDim().z + threadIdx().z
@@ -360,7 +392,7 @@ function _getjacobian_array_prealloc(jA::CuArray{T,2}, m::Reservoir_Model{T, CuA
         Nx, Ny, Nz = mdim
         if i<=Nx && j<=Ny && k<=Nz
             nd = (k-1) * Nx * Ny + (j-1) * Nx + i
-            #Since we are not allowed to allocate an input array inside CUDA kernel, we just do it elementwise here.
+            #Since we are not YET allowed to allocate an input array inside CUDA kernel, we just do it elementwise here.
             #The code below is the one we will duplicate elementwise
             #input = [i==1 ? z : g[2nd-3:2nd-2], j==1 ? z : g[2nd-2Nx-1:2nd-2Nx], k==1 ? z : g[2nd-2*Nx*Ny-1:2nd-2Nx*Ny], g[2nd-1:2nd], k==Nz ? z : g[2nd+2*Nx*Ny-1:2nd+2*Nx*Ny], j==Ny ? z : g[2nd+2Nx-1:2nd+2Nx], i==Nx ? z : g[2nd+1:2nd+2]]
             g1 = i==1 ? 0.0 : g[2nd-3]
@@ -379,6 +411,43 @@ function _getjacobian_array_prealloc(jA::CuArray{T,2}, m::Reservoir_Model{T, CuA
             g14 = i==Nx ? 0.0 : g[2nd+2]
 	    ginput = SVector{14}(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14)
 	    J = ForwardDiff.jacobian(g->SVector{2}(f(g[1], g[2], g[3], g[4], g[5], g[6], g[7], g[8], g[9], g[10], g[11], g[12], g[13], g[14], g_prev[2nd-1], g_prev[2nd], i, j, k, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mp_ref, mC_r, mϕ_ref, mϕ, mk_r_w, mk_r_o, mp_cow, mC_w, mC_o, mρ_w, mρ_o, mμ_w, mμ_o, Δt)), ginput)
+	    jA[2nd, 1]    = J[2,5]
+	    jA[2nd, 2]    = J[2,6]
+	    jA[2nd-1, 2]  = J[1,5]
+	    jA[2nd-1, 3]  = J[1,6]
+            jA[2nd, 4]    = J[2,3]
+	    jA[2nd, 5]    = J[2,4]
+            jA[2nd-1, 5]  = J[1,3]
+	    jA[2nd-1, 6]  = J[1,4]
+            jA[2nd, 7]    = J[2,1]
+	    jA[2nd, 8]    = J[2,2]
+	    jA[2nd-1, 8]  = J[1,1]
+	    jA[2nd-1, 9]  = J[1,2]
+            jA[2nd, 9]    = J[2,7]
+	    jA[2nd, 10]   = J[2,8]
+            jA[2nd-1, 10] = J[1,7]
+	    jA[2nd-1, 11] = J[1,8]
+            jA[2nd, 11]   = J[2,13]
+	    jA[2nd, 12]   = J[2,14]
+            jA[2nd-1, 12] = J[1,13]
+	    jA[2nd-1, 13] = J[1,14]
+            jA[2nd, 14]   = J[2,11]
+	    jA[2nd, 15]   = J[2,12]
+            jA[2nd-1, 15] = J[1,11]
+	    jA[2nd-1, 16] = J[1,12]
+	    jA[2nd, 17]   = J[2,9]
+	    jA[2nd, 18]   = J[2,10]
+	    jA[2nd-1, 18] = J[1,9]
+	    jA[2nd-1, 19] = J[1,10]
+	    ## P, E Array for Preconditioner : A = P + E where P is the main block diagonal
+	    Jcenterinv = inv(SMatrix{2,2}(J[1,7], J[2,7], J[1,8], J[2,8]))
+            pA[2nd, 1]   = Jcenterinv[2,1]
+	    pA[2nd, 2]   = Jcenterinv[2,2]
+            pA[2nd-1, 2] = Jcenterinv[1,1]
+	    pA[2nd-1, 3] = Jcenterinv[1,2] 
+            ## Preallocate eA as a negative values of corners of main block diagonal
+            eA[2nd,9] = -J[2,7]
+            eA[2nd-1,10] = -J[1,8]
 	end
 	return
     end
@@ -390,6 +459,6 @@ function _getjacobian_array_prealloc(jA::CuArray{T,2}, m::Reservoir_Model{T, CuA
     threads     = (threads_x, threads_y, threads_z)
     blocks      = ceil.(Int, (Nxx, Nyy, Nzz) ./ threads)
 
-    @cuda threads=threads blocks=blocks kernel(_residual_cell, jA, m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.p_ref, m.C_r, m.ϕ_ref, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.C_w, m.C_o, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, Δt, g, g_prev)
+    @cuda threads=threads blocks=blocks kernel(_residual_cell, jA, pA, eA,  m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.p_ref, m.C_r, m.ϕ_ref, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.C_w, m.C_o, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, Δt, g, g_prev)
 end
 	

@@ -1,6 +1,6 @@
 using LinearAlgebra
 
-function Solve_adaptive(m::Reservoir_Model, t_init, Δt, g_guess, n_steps; tol_relnorm=1e-3, tol_gmres=1e-2, n_restart=20, n_iter=1000, precondf=GenericReservoir.power_series_precond)
+function Solve_adaptive(m::Reservoir_Model, t_init, Δt, g_guess, n_steps; tol_relnorm=1e-3, tol_gmres=5e-3, n_restart=20, n_iter=200, precondf=GenericReservoir.power_series_precond)
      
     ## Initialize
     record_p   = zeros(2, n_steps)
@@ -20,14 +20,14 @@ function Solve_adaptive(m::Reservoir_Model, t_init, Δt, g_guess, n_steps; tol_r
             if (norm_RES > 5.0e6 || gmresnumcount > 9 || (gmresnumcount>4 && norm_RES>1.0e4))
                 copyto!(psgrid_new, psgrid_old)
                 Δt *= 0.5
-                println("\nNew Δt adapted... \nstep ", steps, " | norm_RES : ", norm_RES, " | Δt : ",Δt, " | ΣΔt : ", t_init+Δt)
                 gmresnumcount, gmresitercount = 0, 0
-                RES = getjacobian(m, Δt, psgrid_new, psgrid_old)
+                RES = getresidual(m, Δt, psgrid_new, psgrid_old)
+		norm_RES = norm(RES)
+		println("\nDiverged, Δt adapted... Δt : ",Δt*2.0, "->", Δt,"\n\nstep ", steps, " | norm_RES : ", norm_RES, " | Δt : ",Δt)
             end
             
-            JAC = getjacobian(m, Δt, psgrid_new, psgrid_old)
-            precP, precE = create_P_E(JAC)
-            
+            JAC, precP, precE = getjacobian(m, Δt, psgrid_new, psgrid_old)
+                       
             print("GMRES start...")
             gmresresult = gmres(JAC, RES, n_restart; tol=tol_gmres, maxiter=n_iter, M=(t->precondf(precP,precE,t)), ifprint=false)
             gmresitercount += gmresresult[3]
@@ -40,8 +40,8 @@ function Solve_adaptive(m::Reservoir_Model, t_init, Δt, g_guess, n_steps; tol_r
             @show norm_RES, norm_dg        
         end
         copyto!(psgrid_old, psgrid_new)
-        record_p[:, steps] = [t_init+Δt; sum(psgrid_old)[1]/length(psgrid_old)]
-        println("Total GMRES iteration : ",gmresitercount, " | Avg p : ", record_p[2, steps])
+	record_p[:, steps] = [t_init+Δt; 2.0*sum(psgrid_old[1:2:end])/length(psgrid_old)]
+        println("Total GMRES iteration : ",gmresitercount, " | Avg p : ", record_p[2, steps]," | Total time : ", t_init+Δt, " Days")
         t_init += Δt
         Δt *= 2.0
     end
