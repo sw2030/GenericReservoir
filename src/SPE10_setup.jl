@@ -48,15 +48,16 @@ m = Reservoir_Model((Nx, Ny, Nz), q_oil, q_water, (Δx, Δy, Δz), z, k, logradi
 
 
 g = [i%2==0 ? 0.2 : 6000.0 for i in 1:2*Nx*Ny*Nz];
-#=
-function savedata(d, fname, timestep) 
-    h5write(string(fname, ".h5"), string("Data/",timestep), cat(Array(d[1][1].A), Array(d[1][2].A);dims = 4))
-    h5write(string(fname, ".h5"), string("Log/",timestep), d[2])
+
+function savedata(d, fname, Num) 
+    h5write(string(fname, ".h5"), string("Data/",Num), Array(d[1]))
+    h5write(string(fname, ".h5"), string("Log/",Num), d[2])
     nothing
 end
-function loaddata(fname, timestep)
-    d = h5read(string(fname, ".h5"), string("Data/",timestep))
-    return (makegrid(distribute(d[:,:,:,1]),7), makegrid(distribute(d[:,:,:,2]),7))
+function loaddata(fname, Num)
+    d = h5read(string(fname, ".h5"), string("Data/",Num))
+    logd = h5read(string(fname, ".h5"), string("Log/",Num))
+    return CuArray(d), logd
 end
-=#
+
 ;;

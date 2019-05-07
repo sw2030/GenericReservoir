@@ -73,12 +73,12 @@ function _residual_cell(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, 
     # k is the controling factor of zeros - if neighbor gets out of bounds it becomes 0
     # Need k as a Grid
     # See note 3
-    k_west  = (mΔ[1][im1,j,k]+mΔ[1][i,j,k])*mk[1][i,j+1,k+1]  *mk[1][i+1,j+1,k+1]/(mΔ[1][im1,j,k]*mk[1][i+1,j+1,k+1] + mΔ[1][i,j,k]*mk[1][i,j+1,k+1])
-    k_east  = (mΔ[1][ip1,j,k]+mΔ[1][i,j,k])*mk[1][i+2,j+1,k+1]*mk[1][i+1,j+1,k+1]/(mΔ[1][ip1,j,k]*mk[1][i+1,j+1,k+1] + mΔ[1][i,j,k]*mk[1][i+2,j+1,k+1])
-    k_south = (mΔ[2][i,jm1,k]+mΔ[2][i,j,k])*mk[2][i+1,j,k+1]  *mk[2][i+1,j+1,k+1]/(mΔ[2][i,jm1,k]*mk[2][i+1,j+1,k+1] + mΔ[2][i,j,k]*mk[2][i+1,j,k+1])
-    k_north = (mΔ[2][i,jp1,k]+mΔ[2][i,j,k])*mk[2][i+1,j+2,k+1]*mk[2][i+1,j+1,k+1]/(mΔ[2][i,jp1,k]*mk[2][i+1,j+1,k+1] + mΔ[2][i,j,k]*mk[2][i+1,j+2,k+1])
-    k_below = (mΔ[3][i,j,km1]+mΔ[3][i,j,k])*mk[3][i+1,j+1,k]  *mk[3][i+1,j+1,k+1]/(mΔ[3][i,j,km1]*mk[3][i+1,j+1,k+1] + mΔ[3][i,j,k]*mk[3][i+1,j+1,k])
-    k_above = (mΔ[3][i,j,kp1]+mΔ[3][i,j,k])*mk[3][i+1,j+1,k+2]*mk[3][i+1,j+1,k+1]/(mΔ[3][i,j,kp1]*mk[3][i+1,j+1,k+1] + mΔ[3][i,j,k]*mk[3][i+1,j+1,k+2])
+    k_west  = (mΔ[1][im1,j,k]+mΔ[1][i,j,k])*mk[1][i,j+1,k+1]  /(mΔ[1][im1,j,k]*mk[1][i+1,j+1,k+1] + mΔ[1][i,j,k]*mk[1][i,j+1,k+1])  *mk[1][i+1,j+1,k+1]
+    k_east  = (mΔ[1][ip1,j,k]+mΔ[1][i,j,k])*mk[1][i+2,j+1,k+1]/(mΔ[1][ip1,j,k]*mk[1][i+1,j+1,k+1] + mΔ[1][i,j,k]*mk[1][i+2,j+1,k+1])*mk[1][i+1,j+1,k+1]
+    k_south = (mΔ[2][i,jm1,k]+mΔ[2][i,j,k])*mk[2][i+1,j,k+1]  /(mΔ[2][i,jm1,k]*mk[2][i+1,j+1,k+1] + mΔ[2][i,j,k]*mk[2][i+1,j,k+1])  *mk[2][i+1,j+1,k+1]
+    k_north = (mΔ[2][i,jp1,k]+mΔ[2][i,j,k])*mk[2][i+1,j+2,k+1]/(mΔ[2][i,jp1,k]*mk[2][i+1,j+1,k+1] + mΔ[2][i,j,k]*mk[2][i+1,j+2,k+1])*mk[2][i+1,j+1,k+1]
+    k_below = (mΔ[3][i,j,km1]+mΔ[3][i,j,k])*mk[3][i+1,j+1,k]  /(mΔ[3][i,j,km1]*mk[3][i+1,j+1,k+1] + mΔ[3][i,j,k]*mk[3][i+1,j+1,k])  *mk[3][i+1,j+1,k+1]
+    k_above = (mΔ[3][i,j,kp1]+mΔ[3][i,j,k])*mk[3][i+1,j+1,k+2]/(mΔ[3][i,j,kp1]*mk[3][i+1,j+1,k+1] + mΔ[3][i,j,k]*mk[3][i+1,j+1,k+2])*mk[3][i+1,j+1,k+1]
     
 
     ###---------------------------------------------------------------------
@@ -228,7 +228,7 @@ function _residual_cell(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, 
                          V_ijk_prev*S_o_prev*mρ_o(p_o_prev))/Δt
    
 			 
-    return residual_water_ijk, residual_oil_ijk
+	return residual_water_ijk, residual_oil_ijk
     
 end
 _residual_cell_pre(m, Δt, g, g_prev, i, j, k) = _residual_cell(g...,  g_prev[1], g_prev[2], i, j, k, m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.p_ref, m.C_r, m.ϕ_ref, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.C_w, m.C_o, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, Δt)
@@ -240,7 +240,7 @@ _residual_cell_pre(m, Δt, g, g_prev, i, j, k) = _residual_cell(g...,  g_prev[1]
 function getresidual(m::Reservoir_Model{T, Array{T,3}}, Δt, g::Array{T,1}, g_prev::Array{T,1}) where {T}
     Nx, Ny, Nz = size(m)
     res = similar(g)
-    z = zeros(2)
+    z = zeros(T, 2)
     for i in 1:Nx, j in 1:Ny, k in 1:Nz
         nd = (k-1) * Nx * Ny + (j-1) * Nx + i 
         input = (i==1 ? z : g[2nd-3:2nd-2], j==1 ? z : g[2nd-2Nx-1:2nd-2Nx], k==1 ? z : g[2nd-2*Nx*Ny-1:2nd-2Nx*Ny],
@@ -320,10 +320,10 @@ function getjacobian(m::Reservoir_Model{T, Array{T,3}}, Δt, g::AbstractVector, 
 end
 function _getjacobian_array(m::Reservoir_Model{T, Array{T,3}}, Δt, g::AbstractVector, g_prev::AbstractVector) where {T}
     Nx, Ny, Nz = size(m)
-    z = zeros(2)
-    jA = zeros(2*Nx*Ny*Nz, 19)
-    pA = zeros(2*Nx*Ny*Nz, 3)
-    eA = zeros(2*Nx*Ny*Nz, 18)
+    z = zeros(T, 2)
+    jA = zeros(T, 2*Nx*Ny*Nz, 19)
+    pA = zeros(T, 2*Nx*Ny*Nz, 3)
+    eA = zeros(T, 2*Nx*Ny*Nz, 18)
     for i in 1:Nx, j in 1:Ny, k in 1:Nz
         nd = (k-1) * Nx * Ny + (j-1) * Nx + i 
         input = (i==1 ? z : g[2nd-3:2nd-2], j==1 ? z : g[2nd-2Nx-1:2nd-2Nx], k==1 ? z : g[2nd-2*Nx*Ny-1:2nd-2Nx*Ny],
@@ -374,9 +374,9 @@ function getjacobian(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, 
 end
 function _getjacobian_array(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
     Nx, Ny, Nz = size(m)
-    jA = CuArray(zeros(2*Nx*Ny*Nz, 19))
-    pA = CuArray(zeros(2*Nx*Ny*Nz, 3))
-    eA = CuArray(zeros(2*Nx*Ny*Nz, 18))
+    jA = CuArray(zeros(T, 2*Nx*Ny*Nz, 19))
+    pA = CuArray(zeros(T, 2*Nx*Ny*Nz, 3))
+    eA = CuArray(zeros(T, 2*Nx*Ny*Nz, 18))
     _getjacobian_array_prealloc(jA, pA, eA, m, Δt, g, g_prev)
     eA[:, 1:9]   .+= view(jA, :, 1:9)
     eA[:, 10:18] .+= view(jA, :, 11:19)

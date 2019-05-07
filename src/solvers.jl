@@ -12,12 +12,12 @@ function Solve_adaptive(m::Reservoir_Model, t_init, Δt, g_guess, n_steps; tol_r
         RES = getresidual(m, Δt, psgrid_new, psgrid_old)
         norm_RES_save = norm(RES)
         norm_RES = norm_RES_save
-        println("\nstep ", steps, " | norm_RES : ", norm_RES, " | Δt : ",Δt, " | ΣΔt : ", t_init+Δt)
-        gmresnumcount, gmresitercount = 0, 0
+        println("\nstep ", steps, " | norm_RES : ", norm_RES, " | Δt : ",Δt)
+        gmresnumcount, gmresitercount, norm_dg = 0, 0, 1.0
         while(norm_RES/norm_RES_save > tol_relnorm)
             
             ## In case it is diverging
-            if (norm_RES > 5.0e6 || gmresnumcount > 9 || (gmresnumcount>4 && norm_RES>1.0e4))
+            if (norm_RES > 5.0e6 || gmresnumcount > 9 || (gmresnumcount>4 && norm_RES>1.0e4) || norm_dg < 1e-2)
                 copyto!(psgrid_new, psgrid_old)
                 Δt *= 0.5
                 gmresnumcount, gmresitercount = 0, 0
@@ -43,7 +43,7 @@ function Solve_adaptive(m::Reservoir_Model, t_init, Δt, g_guess, n_steps; tol_r
 	record_p[:, steps] = [t_init+Δt; 2.0*sum(psgrid_old[1:2:end])/length(psgrid_old)]
         println("Total GMRES iteration : ",gmresitercount, " | Avg p : ", record_p[2, steps]," | Total time : ", t_init+Δt, " Days")
         t_init += Δt
-        Δt *= 2.0
+	if Δt<50 Δt *= 2.0 end
     end
     print("\nSolve done")
     return psgrid_new, record_p
