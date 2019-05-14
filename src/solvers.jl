@@ -17,7 +17,7 @@ function Solve_adaptive(m::Reservoir_Model, t_init, Δt, g_guess, n_steps; tol_r
         while(norm_RES/norm_RES_save>tol_relnorm && norm_RES>tol_absnorm)
             
             ## In case it is diverging
-	    if (norm_RES > 5.0e6 || gmresnumcount > 9 || (gmresnumcount>4 && norm_RES>1.0e4) || norm_dg < 1e-1 || (gmreserr > 0.9 && norm_RES < 50))
+	    if (norm_RES > 5.0e6 || gmresnumcount > 9 || (gmresnumcount>6 && norm_RES>1.0e4) || norm_dg < 1e-1 || (gmreserr > 0.9 && norm_RES < 50) || gmreserr > 0.99) # These are the conditions for reducing Δt (Not converged)
                 copyto!(psgrid_new, psgrid_old)
                 Δt *= 0.5
                 gmresnumcount, gmresitercount = 0, 0
@@ -42,7 +42,9 @@ function Solve_adaptive(m::Reservoir_Model, t_init, Δt, g_guess, n_steps; tol_r
         end
         copyto!(psgrid_old, psgrid_new)
 	record_p[:, steps] = [t_init+Δt; 2.0*sum(psgrid_old[1:2:end])/length(psgrid_old)]
-        println("Total GMRES iteration : ",gmresitercount, " | Avg p : ", record_p[2, steps]," | Total time : ", t_init+Δt, " Days")
+        println("Total GMRES iteration : ",gmresitercount, " | Avg p : ", record_p[2, steps], " | Total time : ", t_init+Δt, " Days")
+	println("Min p : ", minimum(psgrid_old[1:2:end]), " | Max p : ", maximum(psgrid_old[1:2:end]))
+	println("Min s : ", minimum(psgrid_old[2:2:end]), " | Max s : ", maximum(psgrid_old[2:2:end]))
         t_init += Δt
 	if (Δt < 25 && gmresitercount < 1000 && gmresnumcount < 7)
 	    Δt *= 2.0 
