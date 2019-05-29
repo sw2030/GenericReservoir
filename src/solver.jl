@@ -1,12 +1,18 @@
 using LinearAlgebra
 
-function Solve_adaptive(m::Reservoir_Model, t_init, Δt, g_guess, n_steps; tol_relnorm=1e-3, tol_absnorm=1e-1, tol_gmres=1e-2, n_restart=20, n_iter=100, n_prec=7, step_init=0, iftol2=false, arg2=(1e-1, 100, 30, 31))
+function Solve_adaptive(m::Reservoir_Model, t_init, Δt, g_guess, n_steps; tol_relnorm=1e-3, tol_gmres=1e-2, n_restart=20, n_iter=50, n_prec=7, step_init=0, iftol2=false, arg2=(1e-1, 100, 30, 31))
      
     ## Initialize
     record_p   = zeros(2, n_steps)
     psgrid_old = copy(g_guess)
     psgrid_new = copy(psgrid_old)
     errorlog   = []
+    println("Preconditioner degree : ", n_prec)
+    println("GMRES tol : ", tol_gmres)
+    print("Option for More expensive Linsol if GMRES diverges : ")
+    if iftol2 println("On \nIf err > ", arg2[1], " | Restart : ", arg2[2], " | Maxiter : ", arg2[3], "| Prec degree : ", arg2[4]) 
+    else println("Off")
+    end
 
     itercount_total_c, itercount_total_d, t_init_save = 0, 0, t_init
     ## Time stepping start
@@ -16,7 +22,7 @@ function Solve_adaptive(m::Reservoir_Model, t_init, Δt, g_guess, n_steps; tol_r
         norm_RES = norm_RES_save
         println("\nSTEP ", steps+step_init, " | norm_RES : ", norm_RES, " | Δt : ",Δt)
         gmresnumcount, gmresitercount, norm_dg, gmreserr, gmresresult, itercount_div = 0, 0, 1.0, 0.001, 0.0, 0
-        while(norm_RES/norm_RES_save>tol_relnorm && norm_RES>tol_absnorm)
+        while(norm_RES/norm_RES_save>tol_relnorm)
             
             ## In case it is diverging
 	    if (norm_RES > 5.0e6 || gmresnumcount > 9 || (gmresnumcount>6 && norm_RES>1.0e4) || (gmreserr > 0.9 && norm_RES < 50) || gmreserr > 0.99) # These are the conditions for reducing Δt (Not converged)
