@@ -5,18 +5,18 @@ porosity = h5read("spe10data.h5", "data/porosity")
 kx = h5read("spe10data.h5", "data/kx")
 ky = h5read("spe10data.h5", "data/ky")
 kz = h5read("spe10data.h5", "data/kz")
-logradius = h5read("logdata.h5", "data/logrerw")
+logradius = h5read("spe10data.h5", "data/logrerw")
 kraw = [@SVector([kx[i,j,k], ky[i,j,k], kz[i,j,k]]) for i in 1:60, j in 1:220, k in 1:85];
 Nx, Ny, Nz = 60, 220, 85;
 p_ref, ϕ_ref = 14.7, 0.2                           ## ϕ_ref is unused, p_ref used for ρ
 S_wc, S_or = 0.2, 0.2                              ## SPE10 Config
-k_r_w(x)   = ((x-0.2)/(1-0.2-0.2))^2#((x-S_wc)/(1-S_wc-S_or))^2            ## SPE10 Config 
-k_r_o(x)   = (1-(x-0.2)/(1-0.2-0.2))^2#(1 - (x-S_wc)/(1-S_wc-S_or))^2        ## SPE10 Config ## Negligible Capillary Pressure? 
+k_r_w(x)   = ((x-0.2)/(1-0.2-0.2))^2     #((x-S_wc)/(1-S_wc-S_or))^2            ## SPE10 Config 
+k_r_o(x)   = (1-(x-0.2)/(1-0.2-0.2))^2   #(1 - (x-S_wc)/(1-S_wc-S_or))^2        ## SPE10 Config ## Negligible Capillary Pressure? 
 p_cow(x)   = 0.0                                   ## 6.3/log(0.00001)*log(x + 0.00001) 
 C_water, C_r, C_oil    = 3e-6, 1e-6, 1.4e-6        ## C_w, C_r given SPE10 Config, C_oil?
 using CUDAnative
-ρ_water(p) = 64.0*CUDAnative.exp(3e-6*(p-14.7))#64.0*exp(C_water*(p-p_ref))           ## Anyway \approx 64.0 - given in SPE10
-ρ_oil(p)   = 53.0*CUDAnative.exp(1.4e-6*(p-14.7))#53.0*exp(C_oil*(p-p_ref))             ## Anyway \approx 53.0 - given in SPE10
+ρ_water(p) = 64.0*CUDAnative.exp(3e-6*(p-6000.0))#64.0*exp(C_water*(p-p_ref))           ## Anyway \approx 64.0 - given in SPE10
+ρ_oil(p)   = 53.0*CUDAnative.exp(1.4e-6*(p-6000.0))#53.0*exp(C_oil*(p-p_ref))             ## Anyway \approx 53.0 - given in SPE10
 μ_water, μ_oil = 0.3, 3.0 # cp ### SPE10 Config gives water viscosity, also oil pvt table gives \approx 3
 ## 3d model
 ## Porosity proportional control (PI propotional)

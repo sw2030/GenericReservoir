@@ -148,25 +148,40 @@ function _residual_cell(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, 
     Φ_o_ijp1k = p_o_ijp1k - mρ_o(p_o_ijp1k)*mz[i,jp1,k]/144.0
     Φ_o_ip1jk = p_o_ip1jk - mρ_o(p_o_ip1jk)*mz[ip1,j,k]/144.0
 	
-    
+    mkrw_ijk   = S_w_ijk<0.2   ? 0.0 : (S_w_ijk>0.8   ? 1.0 : mk_r_w(S_w_ijk))
+    mkrw_im1jk = S_w_im1jk<0.2 ? 0.0 : (S_w_im1jk>0.8 ? 1.0 : mk_r_w(S_w_im1jk))
+    mkrw_ip1jk = S_w_ip1jk<0.2 ? 0.0 : (S_w_ip1jk>0.8 ? 1.0 : mk_r_w(S_w_ip1jk))
+    mkrw_ijm1k = S_w_ijm1k<0.2 ? 0.0 : (S_w_ijm1k>0.8 ? 1.0 : mk_r_w(S_w_ijm1k))
+    mkrw_ijp1k = S_w_ijp1k<0.2 ? 0.0 : (S_w_ijp1k>0.8 ? 1.0 : mk_r_w(S_w_ijp1k))
+    mkrw_ijkm1 = S_w_ijkm1<0.2 ? 0.0 : (S_w_ijkm1>0.8 ? 1.0 : mk_r_w(S_w_ijkm1))
+    mkrw_ijkp1 = S_w_ijkp1<0.2 ? 0.0 : (S_w_ijkp1>0.8 ? 1.0 : mk_r_w(S_w_ijkp1))
+
+    mkro_ijk   = S_w_ijk<0.2   ? 1.0 : (S_w_ijk>0.8   ? 0.0 : mk_r_o(S_w_ijk))
+    mkro_im1jk = S_w_im1jk<0.2 ? 1.0 : (S_w_im1jk>0.8 ? 0.0 : mk_r_o(S_w_im1jk))
+    mkro_ip1jk = S_w_ip1jk<0.2 ? 1.0 : (S_w_ip1jk>0.8 ? 0.0 : mk_r_o(S_w_ip1jk))
+    mkro_ijm1k = S_w_ijm1k<0.2 ? 1.0 : (S_w_ijm1k>0.8 ? 0.0 : mk_r_o(S_w_ijm1k))
+    mkro_ijp1k = S_w_ijp1k<0.2 ? 1.0 : (S_w_ijp1k>0.8 ? 0.0 : mk_r_o(S_w_ijp1k))
+    mkro_ijkm1 = S_w_ijkm1<0.2 ? 1.0 : (S_w_ijkm1>0.8 ? 0.0 : mk_r_o(S_w_ijkm1))
+    mkro_ijkp1 = S_w_ijkp1<0.2 ? 1.0 : (S_w_ijkp1>0.8 ? 0.0 : mk_r_o(S_w_ijkp1))
+
     ###---------------------------------------------------------------------
     ### Compute Relative Permeability
     ###---------------------------------------------------------------------
     # Upstream condition. Relative permeability is always a function of S_water!    
-    k_r_w_west  = Φ_w_im1jk > Φ_w_ijk ? mk_r_w(S_w_im1jk)*mρ_w(p_w_im1jk) : mk_r_w(S_w_ijk)*mρ_w(p_w_ijk)
-    k_r_w_east  = Φ_w_ip1jk > Φ_w_ijk ? mk_r_w(S_w_ip1jk)*mρ_w(p_w_ip1jk) : mk_r_w(S_w_ijk)*mρ_w(p_w_ijk)
-    k_r_w_south = Φ_w_ijm1k > Φ_w_ijk ? mk_r_w(S_w_ijm1k)*mρ_w(p_w_ijm1k) : mk_r_w(S_w_ijk)*mρ_w(p_w_ijk)
-    k_r_w_north = Φ_w_ijp1k > Φ_w_ijk ? mk_r_w(S_w_ijp1k)*mρ_w(p_w_ijp1k) : mk_r_w(S_w_ijk)*mρ_w(p_w_ijk)
-    k_r_w_below = Φ_w_ijkm1 > Φ_w_ijk ? mk_r_w(S_w_ijkm1)*mρ_w(p_w_ijkm1) : mk_r_w(S_w_ijk)*mρ_w(p_w_ijk)
-    k_r_w_above = Φ_w_ijkp1 > Φ_w_ijk ? mk_r_w(S_w_ijkp1)*mρ_w(p_w_ijkp1) : mk_r_w(S_w_ijk)*mρ_w(p_w_ijk)
+    k_r_w_west  = Φ_w_im1jk > Φ_w_ijk ? mkrw_im1jk*mρ_w(p_w_im1jk) : mkrw_ijk*mρ_w(p_w_ijk)
+    k_r_w_east  = Φ_w_ip1jk > Φ_w_ijk ? mkrw_ip1jk*mρ_w(p_w_ip1jk) : mkrw_ijk*mρ_w(p_w_ijk)
+    k_r_w_south = Φ_w_ijm1k > Φ_w_ijk ? mkrw_ijm1k*mρ_w(p_w_ijm1k) : mkrw_ijk*mρ_w(p_w_ijk)
+    k_r_w_north = Φ_w_ijp1k > Φ_w_ijk ? mkrw_ijp1k*mρ_w(p_w_ijp1k) : mkrw_ijk*mρ_w(p_w_ijk)
+    k_r_w_below = Φ_w_ijkm1 > Φ_w_ijk ? mkrw_ijkm1*mρ_w(p_w_ijkm1) : mkrw_ijk*mρ_w(p_w_ijk)
+    k_r_w_above = Φ_w_ijkp1 > Φ_w_ijk ? mkrw_ijkp1*mρ_w(p_w_ijkp1) : mkrw_ijk*mρ_w(p_w_ijk)
 
 
-    k_r_o_west  = Φ_o_im1jk > Φ_o_ijk ? mk_r_o(S_w_im1jk)*mρ_o(p_o_im1jk) : mk_r_o(S_w_ijk)*mρ_o(p_o_ijk)
-    k_r_o_east  = Φ_o_ip1jk > Φ_o_ijk ? mk_r_o(S_w_ip1jk)*mρ_o(p_o_ip1jk) : mk_r_o(S_w_ijk)*mρ_o(p_o_ijk)
-    k_r_o_south = Φ_o_ijm1k > Φ_o_ijk ? mk_r_o(S_w_ijm1k)*mρ_o(p_o_ijm1k) : mk_r_o(S_w_ijk)*mρ_o(p_o_ijk)
-    k_r_o_north = Φ_o_ijp1k > Φ_o_ijk ? mk_r_o(S_w_ijp1k)*mρ_o(p_o_ijp1k) : mk_r_o(S_w_ijk)*mρ_o(p_o_ijk)
-    k_r_o_below = Φ_o_ijkm1 > Φ_o_ijk ? mk_r_o(S_w_ijkm1)*mρ_o(p_o_ijkm1) : mk_r_o(S_w_ijk)*mρ_o(p_o_ijk)
-    k_r_o_above = Φ_o_ijkp1 > Φ_o_ijk ? mk_r_o(S_w_ijkp1)*mρ_o(p_o_ijkp1) : mk_r_o(S_w_ijk)*mρ_o(p_o_ijk)
+    k_r_o_west  = Φ_o_im1jk > Φ_o_ijk ? mkro_im1jk*mρ_o(p_o_im1jk) : mkro_ijk*mρ_o(p_o_ijk)
+    k_r_o_east  = Φ_o_ip1jk > Φ_o_ijk ? mkro_ip1jk*mρ_o(p_o_ip1jk) : mkro_ijk*mρ_o(p_o_ijk)
+    k_r_o_south = Φ_o_ijm1k > Φ_o_ijk ? mkro_ijm1k*mρ_o(p_o_ijm1k) : mkro_ijk*mρ_o(p_o_ijk)
+    k_r_o_north = Φ_o_ijp1k > Φ_o_ijk ? mkro_ijp1k*mρ_o(p_o_ijp1k) : mkro_ijk*mρ_o(p_o_ijk)
+    k_r_o_below = Φ_o_ijkm1 > Φ_o_ijk ? mkro_ijkm1*mρ_o(p_o_ijkm1) : mkro_ijk*mρ_o(p_o_ijk)
+    k_r_o_above = Φ_o_ijkp1 > Φ_o_ijk ? mkro_ijkp1*mρ_o(p_o_ijkp1) : mkro_ijk*mρ_o(p_o_ijk)
     
 
     ###---------------------------------------------------------------------
@@ -199,8 +214,8 @@ function _residual_cell(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, 
     # 120001 is depth of center of the surface level grids
     Φ_diff_o   = p_o_ijk-p_bth-mρ_o(p_o_ijk)*(mz[i,j,k]-12001)/144
     Φ_diff_w   = p_w_ijk-p_bth-mρ_w(p_w_ijk)*(mz[i,j,k]-12001)/144
-    well_o     = PI==0.0 ? 0.0 : PI*Φ_diff_o*mk_r_o(S_w_ijk)*mρ_o(p_o_ijk)/mμ_o
-    well_w     = PI==0.0 ? 0.0 : PI*Φ_diff_w*mk_r_w(S_w_ijk)*mρ_w(p_w_ijk)/mμ_w
+    well_o     = PI==0.0 ? 0.0 : PI*Φ_diff_o*mkro_ijk*mρ_o(p_o_ijk)/mμ_o
+    well_w     = PI==0.0 ? 0.0 : PI*Φ_diff_w*mkrw_ijk*mρ_w(p_w_ijk)/mμ_w
     
     
     ###---------------------------------------------------------------------
@@ -392,8 +407,7 @@ function _getjacobian_array_prealloc(jA::CuArray{T,2}, pA::CuArray{T,2}, eA::CuA
         Nx, Ny, Nz = mdim
         if i<=Nx && j<=Ny && k<=Nz
             nd = (k-1) * Nx * Ny + (j-1) * Nx + i
-            #Since we are not YET allowed to allocate an input array inside CUDA kernel, we just do it elementwise here.
-            #The code below is the one we will duplicate elementwise
+            #Since we are not YET allowed to allocate an input array inside CUDA kernel, we just do it elementwise here. (Reason why code is so long below)
             #input = [i==1 ? z : g[2nd-3:2nd-2], j==1 ? z : g[2nd-2Nx-1:2nd-2Nx], k==1 ? z : g[2nd-2*Nx*Ny-1:2nd-2Nx*Ny], g[2nd-1:2nd], k==Nz ? z : g[2nd+2*Nx*Ny-1:2nd+2*Nx*Ny], j==Ny ? z : g[2nd+2Nx-1:2nd+2Nx], i==Nx ? z : g[2nd+1:2nd+2]]
             g1 = i==1 ? 0.0 : g[2nd-3]
             g2 = i==1 ? 0.0 : g[2nd-2]
@@ -461,4 +475,3 @@ function _getjacobian_array_prealloc(jA::CuArray{T,2}, pA::CuArray{T,2}, eA::CuA
 
     @cuda threads=threads blocks=blocks kernel(_residual_cell, jA, pA, eA,  m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.p_ref, m.C_r, m.ϕ_ref, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.C_w, m.C_o, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, Δt, g, g_prev)
 end
-	
