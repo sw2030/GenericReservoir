@@ -13,10 +13,11 @@ function Solve_adaptive(m::Reservoir_Model, t_init, Δt, g_guess, n_steps; tol_r
     if iftol2 println("On \nIf err > ", arg2[1], " | Restart : ", arg2[2], " | Maxiter : ", arg2[3], "| Prec degree : ", arg2[4]) 
     else println("Off")
     end
-
+    runtime = 0.0
     itercount_total_c, itercount_total_d, t_init_save = 0, 0, t_init
     ## Time stepping start
     for steps in 1:n_steps
+	stepruntime = @elapsed begin
         RES = getresidual(m, Δt, psgrid_new, psgrid_old)
         norm_RES_save = norm(RES)
         norm_RES = norm_RES_save
@@ -72,6 +73,9 @@ function Solve_adaptive(m::Reservoir_Model, t_init, Δt, g_guess, n_steps; tol_r
 	    if (Δt>25.0&& Δt<=50.0) Δt=50.0 end
 	    if Δt<=25.0 Δt *= 2.0 end
         end
+        end
+	runtime += stepruntime
+	println("Runtime on this step : ", stepruntime, " | Total Runtime : ", runtime) 
     end
     println("\nTotal Days : ",t_init-t_init_save ," | Total iteration(converge) : ", itercount_total_c, " | Total iteration(diverge) : ", itercount_total_d)
     return psgrid_new, record_p, errorlog

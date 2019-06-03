@@ -389,9 +389,9 @@ function getjacobian(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, 
 end
 function _getjacobian_array(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
     Nx, Ny, Nz = size(m)
-    jA = CuArray(zeros(T, 2*Nx*Ny*Nz, 19))
-    pA = CuArray(zeros(T, 2*Nx*Ny*Nz, 3))
-    eA = CuArray(zeros(T, 2*Nx*Ny*Nz, 18))
+    jA = cuzeros(T, 2*Nx*Ny*Nz, 19)
+    pA = cuzeros(T, 2*Nx*Ny*Nz, 3)
+    eA = cuzeros(T, 2*Nx*Ny*Nz, 18)
     _getjacobian_array_prealloc(jA, pA, eA, m, Δt, g, g_prev)
     eA[:, 1:9]   .+= view(jA, :, 1:9)
     eA[:, 10:18] .+= view(jA, :, 11:19)
