@@ -1,20 +1,21 @@
 ## Here M is right preconditioner - for left preconditioner: look Reservoirnew
-function gmres(A, b, restrt::Int64; tol::Real=1e-5, maxiter::Int=200, ifprint=false, M=identity, x = zero(b))
-    realn, bnrm2 = length(b), norm(b)
-    if bnrm2==0 bnrm2 = 1.0 end
+function gmres(A, b, restrt::Int64; tol::Real=1e-5, maxiter::Int=200, ifprint=false, M=identity, x_init = zero(b))
+    x = copy(x_init)
+    bnrm2, T =  norm(b), eltype(b)
+    if bnrm2==zero(T) bnrm2 = one(T) end
     r = copy(b)
-    BLAS.gemv!('N',-1.0, A, M(x), 1.0, r)
-    err = 1.0
+    BLAS.gemv!('N',-one(T), A, M(x), one(T), r)
+    err = norm(r)/bnrm2
     itersave = 0
     ismax = false
-    errlog = Float64[]
+    errlog = T[]
 
-    restrt=min(restrt, realn-1)
+    restrt=min(restrt, length(b)-1)
     Q = [zero(b) for i in 1:restrt+1]
-    H = zeros(restrt+1, restrt)
-    cs = zeros(restrt)
-    sn = zeros(restrt)
-    s = zeros(restrt+1)
+    H = zeros(T, restrt+1, restrt)
+    cs = zeros(T, restrt)
+    sn = zeros(T, restrt)
+    s = zeros(T, restrt+1)
     flag = -1
     isave = 1
     y = zeros(restrt+1)
@@ -23,14 +24,14 @@ function gmres(A, b, restrt::Int64; tol::Real=1e-5, maxiter::Int=200, ifprint=fa
         itersave = iter
         r = Q[1]
         copyto!(r, b)
-        BLAS.gemv!('N', -1.0, A, M(x), 1.0, r)
-        fill!(s, 0.0)
+	BLAS.gemv!('N', -one(T), A, M(x), one(T), r)
+	fill!(s, zero(T))
         s[1] = norm(r)
         rmul!(r, inv(s[1]))
         for i in 1:restrt
             isave = i
             w = Q[i+1]
-            BLAS.gemv!('N', 1.0, A, M(Q[i]), 0.0, w)
+	    BLAS.gemv!('N', one(T), A, M(Q[i]), zero(T), w)
             for k in 1:i
                 H[k,i] = LinearAlgebra.dot(w, Q[k])
                 LinearAlgebra.axpy!(-H[k,i],Q[k],w)
@@ -47,7 +48,7 @@ function gmres(A, b, restrt::Int64; tol::Real=1e-5, maxiter::Int=200, ifprint=fa
             s[i+1] = -sn[i]*s[i]
             s[i]   = cs[i]*s[i]
             H[i,i] = cs[i]*H[i,i] + sn[i]*H[i+1,i]
-            H[i+1,i] = 0.0
+	    H[i+1,i] = zero(T)
             err  = abs(s[i+1])/bnrm2
 
             if err < tol
@@ -69,7 +70,7 @@ function gmres(A, b, restrt::Int64; tol::Real=1e-5, maxiter::Int=200, ifprint=fa
             LinearAlgebra.axpy!(y[k],Q[k],x)
         end
         copyto!(r, b)
-	BLAS.gemv!('N', -1.0, A, M(x), 1.0, r)
+	BLAS.gemv!('N', -one(T), A, M(x), one(T), r)
         s[isave+1] = norm(r)
         err = s[isave+1]/bnrm2
         if err<=tol
