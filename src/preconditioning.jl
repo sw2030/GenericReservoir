@@ -1,12 +1,12 @@
 using DIA, LinearAlgebra, CuArrays, StaticArrays
 
 function tridiagonal_solve!(a::AbstractVector{T}, b::AbstractVector{T}, c::AbstractVector{T}, d::AbstractVector{T}, x::AbstractVector{T}, startidx, endidx) where {T} # b, d, x from startidx:endidx, a, c from startidx:endidx-1
-    for i in startidx+1:endidx
+    @inbounds for i in startidx+1:endidx
 	b[i] = b[i] - a[i-1]*c[i-1]/b[i-1]
 	d[i] = d[i] - a[i-1]*d[i-1]/b[i-1]
     end
     x[endidx] = d[endidx]/b[endidx]
-    for i in (endidx-1):-1:startidx
+    @inbounds for i in (endidx-1):-1:startidx
 	x[i] = (d[i] - c[i]*x[i+1])/b[i]
     end
 end
@@ -14,9 +14,8 @@ function block_tridiagonal_solve!(a::CuVector{T}, b::CuVector{T}, c::CuVector{T}
     function kernel(f, a, b, c, d, x, Nx, Ny, Nz)
 	i = (blockIdx().x-1) * blockDim().x + threadIdx().x
         j = (blockIdx().y-1) * blockDim().y + threadIdx().y
-
 	if i<=Nx && j<=Ny
-            startid = Nz*((i-1)*Ny + j-1) + 1
+	    startid = Nz*((i-1)*Ny + j-1) + 1
             endid = startid + Nz - 1
 	    f(a, b, c, d, x, startid, endid)
 	end
@@ -28,13 +27,12 @@ function block_tridiagonal_solve!(a::CuVector{T}, b::CuVector{T}, c::CuVector{T}
     threads_y   = min(max_threads ÷ threads_x, Ny)
     threads     = (threads_x, threads_y)
     blocks      = ceil.(Int, (Nx, Ny) ./ threads)
-
     @cuda threads=threads blocks=blocks kernel(tridiagonal_solve!, a, b, c, d, x, Nx, Ny, Nz)
     return
 end
 
 function tridiagonal_block_solve!(a1, a2, a3, a4, b1, b2, b3, b4, c1, c2, c3, c4, d, x, startidx, endidx) # a, b, c 4 Vectors each, d, x are gonna be long vector
-    for i in startidx+1:endidx
+    @inbounds for i in startidx+1:endidx
 	A = SMatrix{2,2}(a1[i-1], a3[i-1], a2[i-1], a4[i-1])
 	Binv = inv(SMatrix{2,2}(b1[i-1], b3[i-1], b2[i-1], b4[i-1]))
 	Bdiff = A*Binv*SMatrix{2,2}(c1[i-1], c3[i-1], c2[i-1], c4[i-1])
@@ -49,7 +47,7 @@ function tridiagonal_block_solve!(a1, a2, a3, a4, b1, b2, b3, b4, c1, c2, c3, c4
     xendidx = inv(SMatrix{2,2}(b1[endidx], b3[endidx], b2[endidx], b4[endidx]))*SVector{2}(d[2endidx-1], d[2endidx])
     x[2endidx-1] = xendidx[1]
     x[2endidx] = xendidx[2]
-    for i in (endidx-1):-1:startidx
+    @inbounds for i in (endidx-1):-1:startidx
         xi = inv(SMatrix{2,2}(b1[i], b3[i], b2[i], b4[i]))*(SVector{2}(d[2i-1], d[2i]) - SMatrix{2,2}(c1[i], c3[i], c2[i], c4[i]) * SVector{2}(x[2i+1], x[2i+2]))
 	x[2i-1] = xi[1]
 	x[2i] = xi[2]
@@ -59,7 +57,6 @@ function block_tridiagonal_block_solve!(a1::CuVector{T}, a2, a3, a4, b1, b2, b3,
     function kernel(f, a1, a2, a3, a4, b1, b2, b3, b4, c1, c2, c3, c4, d, x, Nx, Ny, Nz)
 	i = (blockIdx().x-1) * blockDim().x + threadIdx().x
         j = (blockIdx().y-1) * blockDim().y + threadIdx().y
-
 	if i<=Nx && j<=Ny
 	    startid = Nz*((i-1)*Ny + j-1) + 1
             endid = startid + Nz - 1
@@ -73,37 +70,36 @@ function block_tridiagonal_block_solve!(a1::CuVector{T}, a2, a3, a4, b1, b2, b3,
     threads_y   = min(max_threads ÷ threads_x, Ny)
     threads     = (threads_x, threads_y)
     blocks      = ceil.(Int, (Nx, Ny) ./ threads)
-
     @cuda threads=threads blocks=blocks kernel(tridiagonal_block_solve!, a1, a2, a3, a4, b1, b2, b3, b4, c1, c2, c3, c4, d, x, Nx, Ny, Nz)
     return 
 end
 
-function lsps_prec(P, E::SparseMatrixDIA{T}, n, x) where {T}
-    result = zero(x)
+function tridiagonal_solve_DIA!(P::SparseMatrixDIA, d, x, Nx, Ny, Nz)
     block_tridiagonal_block_solve!(P.diags[2].second[1:2:end], P.diags[3].second[2:2:end], P.diags[1].second[1:2:end], P.diags[2].second[2:2:end],
                                   P.diags[4].second[1:2:end], P.diags[5].second[1:2:end], P.diags[3].second[1:2:end], P.diags[4].second[2:2:end],
-				  P.diags[6].second[1:2:end], P.diags[7].second[1:2:end], P.diags[5].second[2:2:end], P.diags[6].second[2:2:end], copy(x), result, 60, 220, 85) #result = P^-1*x
+				  P.diags[6].second[1:2:end], P.diags[7].second[1:2:end], P.diags[5].second[2:2:end], P.diags[6].second[2:2:end], copy(d), x, Nx, Ny, Nz)
+    return x
+end
+function lsps_prec(P, E::SparseMatrixDIA{T}, n, x) where {T}
+    result = zero(x)
+    result = tridiagonal_solve_DIA!(P, x, result, 60, 220, 85) # result = P^{-1}x
     tmp1 = copy(result)
     tmp2 = zero(x)
     for i in 1:n
-	BLAS.gemv!('N',  one(T), E, tmp1, zero(T), tmp2) # tmp2 = E * tmp1
-	block_tridiagonal_block_solve!(P.diags[2].second[1:2:end], P.diags[3].second[2:2:end], P.diags[1].second[1:2:end], P.diags[2].second[2:2:end],
-				  P.diags[4].second[1:2:end], P.diags[5].second[1:2:end], P.diags[3].second[1:2:end], P.diags[4].second[2:2:end], 
-				  P.diags[6].second[1:2:end], P.diags[7].second[1:2:end], P.diags[5].second[2:2:end], P.diags[6].second[2:2:end], -tmp2, tmp1, 60, 220, 85)
-	#BLAS.gemv!('N', -one(T), P, tmp2, zero(T), tmp1) # = tmp1 = -P^-1 * tmp2 
+	BLAS.gemv!('N',  one(T), E, tmp1, zero(T), tmp2)    # tmp2 = E * tmp1
+	tridiagonal_solve_DIA!(P, -tmp2, tmp1, 60, 220, 85) # = tmp1 = -P^-1 * tmp2 
 	LinearAlgebra.axpy!(one(T), tmp1, result)
     end
     return result
 end
 function lsps_prec_CPR(P, E::SparseMatrixDIA{T}, n, x) where {T}
     result = zero(x)
-    block_tridiagonal_solve!(copy(P.diags[1].second), copy(P.diags[2].second), copy(P.diags[3].second), copy(x), result, 60, 220, 85) 				  #result = P^-1*x
+    block_tridiagonal_solve!(copy(P.diags[1].second), copy(P.diags[2].second), copy(P.diags[3].second), copy(x), result, 60, 220, 85) #result = P^-1*x
     tmp1 = copy(result)
     tmp2 = zero(x)
     for i in 1:n
         BLAS.gemv!('N',  one(T), E, tmp1, zero(T), tmp2) # tmp2 = E * tmp1
-	block_tridiagonal_solve!(copy(P.diags[1].second), copy(P.diags[2].second), copy(P.diags[3].second), -tmp2, tmp1, 60, 220, 85)
-	#BLAS.gemv!('N', -one(T), P, tmp2, zero(T), tmp1) # = tmp1 = -P^-1 * tmp2
+	block_tridiagonal_solve!(copy(P.diags[1].second), copy(P.diags[2].second), copy(P.diags[3].second), -tmp2, tmp1, 60, 220, 85) # = tmp1 = -P^-1 * tmp2
         LinearAlgebra.axpy!(one(T), tmp1, result)
     end
     return result
@@ -121,7 +117,6 @@ function inv_block_diag(W1, W2, W3, N)
 	end
     return 
     end
-
     @cuda threads=256 blocks=ceil(Int, N/256) kernel(W1, W2, W3, N)
     return 
 end
