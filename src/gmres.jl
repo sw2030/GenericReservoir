@@ -2,7 +2,7 @@
 function gmres(A, b, restrt::Int64; tol::Real=1e-5, maxiter::Int=200, ifprint=false, M=identity, x_init = zero(b))
     x = copy(x_init)
     bnrm2, T =  norm(b), eltype(b)
-    if bnrm2==zero(T) bnrm2 = one(T) end
+    if bnrm2==zero(T) return x, false, 0, 0.0, T[] end
     r = copy(b)
     BLAS.gemv!('N',-one(T), A, M(x), one(T), r)
     err = norm(r)/bnrm2
