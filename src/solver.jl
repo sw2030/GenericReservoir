@@ -37,7 +37,8 @@ function Solve_SPE10(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps; tol_r
             end
             
             JAC, precP, precE = getjacobian(m, Δt, psgrid_new, psgrid_old)
-                       
+	    triLU!(precP, 1122000 ÷ 340, 340)
+
             print("LinSolve start...")
 	    gmresresult = gmres(JAC, RES, n_restart; tol=tol_gmres, maxiter=n_iter, M=(t->lsps_prec(precP, precE, n_prec, t)), ifprint=false)
             gmresitercount += gmresresult[3]
@@ -116,12 +117,13 @@ function Solve_SPE10_CPR(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps; t
                 norm_RES = norm(RES)
                 println("\nNot Converged, Δt reduced... Δt : ",Δt*2.0, "->", Δt,"\n\nSTEP ", steps+step_init, " | norm_RES : ", norm_RES, " | Δt : ",Δt)
 	    end
-            JAC, precP, precE = getjacobian(m, Δt, psgrid_new, psgrid_old)
+            JAC, precP, precE, diagW = getjacobian2(m, Δt, psgrid_new, psgrid_old)
+	    RES_scaled = diagW * RES
 
 	    print("LinSolve start...")
-	    Jp, Pp, Ep, W = CPR_Setup(JAC, precP, precE)
+	    Jp, Pp, Ep, W = CPR_Setup!(JAC, precP, precE)
 	    inneriter = []
-	    gmresresult = gmres(JAC, RES, n_restart;maxiter=n_iter, M=(t->CPR_LSPS(JAC, precP, precE, Jp, Pp, Ep, W, t, CPR_tol, CPR_iter, CPR_prec, CPR_restart, inneriter)), tol=tol_gmres)
+	    gmresresult = gmres(JAC, RES_scaled, n_restart;maxiter=n_iter, M=(t->CPR_LSPS(JAC, precP, precE, Jp, Pp, Ep, W, t, CPR_tol, CPR_iter, CPR_prec, CPR_restart, inneriter)), tol=tol_gmres)
 	    #gmresresult2 = gmres(JAC, RES, n_restart;maxiter=n_iter, M=(t->GenericReservoir.lsps_prec(precP, precE, n_prec, t)), tol=tol_gmres)[3]
 	    gmresitercount += gmresresult[3]
             gmresnumcount  += 1

@@ -5,6 +5,7 @@ include("res_jac.jl")
 include("gmres.jl")
 include("preconditioning.jl")
 include("solver.jl")
+include("tridiagonal.jl")
 
 
 export Reservoir_Model, gmres
