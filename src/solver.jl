@@ -40,10 +40,11 @@ function Solve_SPE10(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;prec="
 			
 			#### Linsolve
 			print("LinSolve start...")
-			dg, gmreserr, Linsolveiter = prec=="CPR-LSPS" ? CPR_LinSolve(RES_scaled, JAC, precP, precE, CPR_tol, CPR_iter, CPR_prec, CPR_restart, tol_gmres, n_iter, n_restart) : LSPS_LinSolve(RES, J, P, E, tol_gmres, n_prec, n_iter, n_restart)
+			dg, gmreserr, Linsolveiter, log = prec=="CPR-LSPS" ? CPR_LinSolve(RES_scaled, JAC, precP, precE, CPR_tol, CPR_iter, CPR_prec, CPR_restart, tol_gmres, n_iter, n_restart) : LSPS_LinSolve(RES, J, P, E, tol_gmres, n_prec, n_iter, n_restart)
 			println("...LinSolve done  ||  Iter : ",Linsolveiter, " || rel_err : ",gmreserr)
 	
 		   	#### Update and Print
+			push!(errorlog, log)
 			gmresnumcount += 1
 			gmresitercount += Linsolveiter[1]
 			prec=="CPR-LSPS" ? inneritercount+=Linsolveiter[2] : nothing
@@ -53,9 +54,10 @@ function Solve_SPE10(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;prec="
 			@show norm_RES, norm_dg
 			if isnan(norm_RES) norm_RES=1.0e10 end
 		end
+		griddiff = psgrid_new - psgrid_old
 	        copyto!(psgrid_old, psgrid_new)
        		record_p[:, steps] = [t_init+Δt; 2*sum(psgrid_old[1:2:end])/length(psgrid_old)]
-		print_final(steps, t_init, Δt, psgrid_old, record_p, gmresitercount, itercount_div, inneritercount)
+		print_final(steps, t_init, Δt, psgrid_old, record_p, gmresitercount, itercount_div, inneritercount, griddiff)
 		t_init += Δt
 		itercount_total_c += gmresitercount
 		itercount_total_d += itercount_div
@@ -72,8 +74,8 @@ function Solve_SPE10(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;prec="
 	return psgrid_new, record_p, errorlog
 end
 
-function print_final(steps, t_init, Δt, psgrid_old, record_p, gmresitercount, itercount_div, inneritercount)
-	println("CPR Stage 1 iteration : ", inneritercount)
+function print_final(steps, t_init, Δt, psgrid_old, record_p, gmresitercount, itercount_div, inneritercount, griddiff)
+	println("CPR Stage 1 iteration : ", inneritercount, "| max dp, ds : ", (maximum(abs.(Array(griddiff[1:2:end]))), maximum(abs.(Array(griddiff[2:2:end])))))
         println("GMRES iteration(converge) : ",gmresitercount, " | GMRES iteration(diverge) : ", itercount_div)
         println("Min p : ", minimum(psgrid_old[1:2:end]), " | Max p : ", maximum(psgrid_old[1:2:end]))
         println("Min s : ", minimum(psgrid_old[2:2:end]), " | Max s : ", maximum(psgrid_old[2:2:end]))
@@ -94,9 +96,9 @@ function CPR_LinSolve(RES, J, P, E, CPR_tol, CPR_iter, CPR_prec, CPR_restart, to
     	Jp, Pp, Ep = CPR_Setup!(J, P, E)
     	inneriter = []
     	gmresresult = gmres(J, RES, n_restart;maxiter=n_iter, M=(t->CPR_LSPS(J, P, E, Jp, Pp, Ep, t, CPR_tol, CPR_iter, CPR_prec, CPR_restart, inneriter)), tol=tol_gmres)
-    	return gmresresult[1], gmresresult[4], (gmresresult[3], sum(inneriter))
+	return gmresresult[1], gmresresult[4], (gmresresult[3], sum(inneriter)), gmresresult[5]
 end
 function LSPS_LinSolve(RES, J, P, E, tol_gmres, n_prec, n_iter, n_restart)
 	gmresresult = gmres(J, RES, n_restart;maxiter=n_iter, M=(t->lsps_prec(P, E, n_prec, t)), tol=tol_gmres);
-	return gmresresult[1], gmresresult[4], gmresresult[3]
+	return gmresresult[1], gmresresult[4], gmresresult[3], gmresresult[5]
 end

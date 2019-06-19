@@ -1,7 +1,7 @@
 include("GenericReservoir.jl");
 using Main.GenericReservoir, CuArrays
 include("SPE10_setup.jl");
-model_gpu = Reservoir_Model((Nx, Ny, Nz), CuArray(q_o), CuArray(q_w), (CuArray(Δx), CuArray(Δy), CuArray(Δz)), CuArray(z), (CuArray(kx_pad), CuArray(ky_pad), CuArray(kz_pad)), CuArray(logradius), CuArray(ϕ), k_r_w, k_r_o, p_cow, ρ_w, ρ_o, μ_w, μ_o);
+model_gpu = Reservoir_Model((Nx, Ny, Nz), CuArray(q_o), CuArray(q_w), (CuArray(Δx), CuArray(Δy), CuArray(Δz)), CuArray(z), (CuArray(kx_pad), CuArray(ky_pad), CuArray(kz_pad)), CuArray(logradius), CuArray(ϕ), k_r_w, k_r_o, p_cow, ρ_w, ρ_o, μ_w, μ_o, V_mul);
 g_gpu = CuArray(g);
 println("===================Test run for Compiling===================")
 #GenericReservoir.Solve_SPE10_CPR(model_gpu, 0.0, 0.001, g_gpu, 1); ## Compilation

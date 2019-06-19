@@ -20,11 +20,12 @@ struct Reservoir_Model{T, Tg<:AbstractArray}
     ρ_o::Function
     μ_w::T
     μ_o::T
+    V_mul::Function
 end
 Base.size(M::Reservoir_Model) = M.dim
 
 ## k is Nx+2, Ny+2, Nz+2 sized Array. It contains boundary(zero) information - to get i, j, k cell permeability, k[i+1, j+1, k+1] needed
-function _residual_cell(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14, g_prev1, g_prev2, i, j, k, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, Δt)#;bth=true, p_bth=4000.0, maxinj = 10000.0)
+function _residual_cell(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14, g_prev1, g_prev2, i, j, k, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, mV_mul, Δt)#;bth=true, p_bth=4000.0, maxinj = 10000.0)
 
     maxinj= 10000.0
     bth = true
@@ -120,8 +121,9 @@ function _residual_cell(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, 
     p_w_prev  = p_o_prev  - mp_cow(S_w_prev)
     
     # 5.615 is oil field units correction factor. See Note 3.
-    V_ijk      = mΔ[1][i,j,k]*mΔ[2][i,j,k]*mΔ[3][i,j,k]*mϕ[i,j,k]/5.615
-    V_ijk_prev = mΔ[1][i,j,k]*mΔ[2][i,j,k]*mΔ[3][i,j,k]*mϕ[i,j,k]/5.615
+    V_std      = (mΔ[1][i,j,k]*mΔ[2][i,j,k]*mΔ[3][i,j,k]*mϕ[i,j,k]/5.615)
+    V_ijk      = V_std * mV_mul(p_o_ijk)
+    V_ijk_prev = V_std * mV_mul(p_o_prev)
     
     
     ###---------------------------------------------------------------------
@@ -170,7 +172,6 @@ function _residual_cell(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, 
     k_r_w_below = Φ_w_ijkm1 > Φ_w_ijk ? mkrw_ijkm1*mρ_w(p_w_ijkm1) : mkrw_ijk*mρ_w(p_w_ijk)
     k_r_w_above = Φ_w_ijkp1 > Φ_w_ijk ? mkrw_ijkp1*mρ_w(p_w_ijkp1) : mkrw_ijk*mρ_w(p_w_ijk)
 
-
     k_r_o_west  = Φ_o_im1jk > Φ_o_ijk ? mkro_im1jk*mρ_o(p_o_im1jk) : mkro_ijk*mρ_o(p_o_ijk)
     k_r_o_east  = Φ_o_ip1jk > Φ_o_ijk ? mkro_ip1jk*mρ_o(p_o_ip1jk) : mkro_ijk*mρ_o(p_o_ijk)
     k_r_o_south = Φ_o_ijm1k > Φ_o_ijk ? mkro_ijm1k*mρ_o(p_o_ijm1k) : mkro_ijk*mρ_o(p_o_ijk)
@@ -197,7 +198,6 @@ function _residual_cell(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, 
     T_o_below   = 1.127e-3*k_below*k_r_o_below/mμ_o*A_below/Δz_below
     T_o_above   = 1.127e-3*k_above*k_r_o_above/mμ_o*A_above/Δz_above
 
-
     ###---------------------------------------------------------------------
     ### Impose Well Condition
     ###---------------------------------------------------------------------
@@ -206,42 +206,39 @@ function _residual_cell(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, 
     #
     PI = mq_oil[i,j,k] > 0 ? 7.06e-3*((mk[1][i+1,j+1,k+1]))*mΔ[3][i,j,k]/mlogr[i,j,k] : 0.0
     
-    # 120001 is depth of center of the surface level grids
-    Φ_diff_o   = p_o_ijk-p_bth-mρ_o(p_o_ijk)*(mz[i,j,k]-12001)/144
-    Φ_diff_w   = p_w_ijk-p_bth-mρ_w(p_w_ijk)*(mz[i,j,k]-12001)/144
+    # 12001 is depth of center of the surface level grids
+    Φ_diff_o   = p_o_ijk-p_bth-mρ_o(p_o_ijk)*(mz[i,j,k])/144
+    Φ_diff_w   = p_w_ijk-p_bth-mρ_w(p_w_ijk)*(mz[i,j,k])/144
     well_o     = PI==0.0 ? 0.0 : PI*Φ_diff_o*mkro_ijk*mρ_o(p_o_ijk)/mμ_o
     well_w     = PI==0.0 ? 0.0 : PI*Φ_diff_w*mkrw_ijk*mρ_w(p_w_ijk)/mμ_w
     
+    Flux_w_west  = T_w_west * (p_w_im1jk - p_w_ijk - (mρ_w(p_w_ijk) + mρ_w(p_w_im1jk))/2 * (mz[im1,j,k]-mz[i,j,k])/144)
+    Flux_w_east  = T_w_east * (p_w_ip1jk - p_w_ijk - (mρ_w(p_w_ijk) + mρ_w(p_w_ip1jk))/2 * (mz[ip1,j,k]-mz[i,j,k])/144)
+    Flux_w_south = T_w_south * (p_w_ijm1k - p_w_ijk - (mρ_w(p_w_ijk) + mρ_w(p_w_ijm1k))/2 * (mz[i,jm1,k]-mz[i,j,k])/144)
+    Flux_w_north = T_w_north * (p_w_ijp1k - p_w_ijk - (mρ_w(p_w_ijk) + mρ_w(p_w_ijp1k))/2 * (mz[i,jp1,k]-mz[i,j,k])/144)
+    Flux_w_below = T_w_below * (p_w_ijkm1 - p_w_ijk - (mρ_w(p_w_ijk) + mρ_w(p_w_ijkm1))/2 * (mz[i,j,km1]-mz[i,j,k])/144)
+    Flux_w_above = T_w_above * (p_w_ijkp1 - p_w_ijk - (mρ_w(p_w_ijk) + mρ_w(p_w_ijkp1))/2 * (mz[i,j,kp1]-mz[i,j,k])/144)
+
+    Flux_o_west  = T_o_west * (p_o_im1jk - p_o_ijk - (mρ_o(p_o_ijk) + mρ_o(p_o_im1jk))/2 * (mz[im1,j,k]-mz[i,j,k])/144)
+    Flux_o_east  = T_o_east * (p_o_ip1jk - p_o_ijk - (mρ_o(p_o_ijk) + mρ_o(p_o_ip1jk))/2 * (mz[ip1,j,k]-mz[i,j,k])/144)
+    Flux_o_south = T_o_south * (p_o_ijm1k - p_o_ijk - (mρ_o(p_o_ijk) + mρ_o(p_o_ijm1k))/2 * (mz[i,jm1,k]-mz[i,j,k])/144)
+    Flux_o_north = T_o_north * (p_o_ijp1k - p_o_ijk - (mρ_o(p_o_ijk) + mρ_o(p_o_ijp1k))/2 * (mz[i,jp1,k]-mz[i,j,k])/144)
+    Flux_o_below = T_o_below * (p_o_ijkm1 - p_o_ijk - (mρ_o(p_o_ijk) + mρ_o(p_o_ijkm1))/2 * (mz[i,j,km1]-mz[i,j,k])/144)
+    Flux_o_above = T_o_above * (p_o_ijkp1 - p_o_ijk - (mρ_o(p_o_ijk) + mρ_o(p_o_ijkp1))/2 * (mz[i,j,kp1]-mz[i,j,k])/144)
+
+
     
     ###---------------------------------------------------------------------
     ### Calculate Residuals
     ###---------------------------------------------------------------------
-    residual_water_ijk = T_w_west*(Φ_w_im1jk - Φ_w_ijk)   +
-                         T_w_east*(Φ_w_ip1jk - Φ_w_ijk)   +
-                         T_w_south*(Φ_w_ijm1k - Φ_w_ijk)  +
-                         T_w_north*(Φ_w_ijp1k - Φ_w_ijk)  +
-                         T_w_above*(Φ_w_ijkp1 - Φ_w_ijk)  +
-                         T_w_below*(Φ_w_ijkm1 - Φ_w_ijk)  -
-                         q_w*mρ_w(p_w_ijk)                -
-                         well_w                            -
-                         (V_ijk*S_w_ijk*mρ_w(p_w_ijk)     -
-                         V_ijk_prev*S_w_prev*mρ_w(p_w_prev))/Δt
+    residual_w = Flux_w_west + Flux_w_east + Flux_w_south + Flux_w_north + Flux_w_above + Flux_w_below - well_w - (V_ijk*S_w_ijk*mρ_w(p_w_ijk) - V_ijk_prev*S_w_prev*mρ_w(p_w_prev))/Δt - q_w*mρ_w(p_w_ijk)
     
-    residual_oil_ijk   = T_o_west*(Φ_o_im1jk - Φ_o_ijk)   +
-                         T_o_east*(Φ_o_ip1jk - Φ_o_ijk)   +
-                         T_o_south*(Φ_o_ijm1k - Φ_o_ijk)  +
-                         T_o_north*(Φ_o_ijp1k - Φ_o_ijk)  +
-                         T_o_above*(Φ_o_ijkp1 - Φ_o_ijk)  +
-                         T_o_below*(Φ_o_ijkm1 - Φ_o_ijk)  -
-                         well_o                            -
-                         (V_ijk*S_o_ijk*mρ_o(p_o_ijk)     -
-                         V_ijk_prev*S_o_prev*mρ_o(p_o_prev))/Δt
-   
-			 
-	return residual_water_ijk, residual_oil_ijk
+    residual_o = Flux_o_west + Flux_o_east + Flux_o_south + Flux_o_north + Flux_o_above + Flux_o_below - well_o - (V_ijk*S_o_ijk*mρ_o(p_o_ijk) - V_ijk_prev*S_o_prev*mρ_o(p_o_prev))/Δt
+
+    return residual_w, residual_o
     
 end
-_residual_cell_pre(m, Δt, g, g_prev, i, j, k) = _residual_cell(g...,  g_prev[1], g_prev[2], i, j, k, m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, Δt)
+_residual_cell_pre(m, Δt, g, g_prev, i, j, k) = _residual_cell(g...,  g_prev[1], g_prev[2], i, j, k, m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, m.V_mul, Δt)
 
 ###---------------------------------------------------------------------
 ### Residual Assembly
@@ -268,7 +265,7 @@ function getresidual(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, 
 end
 function _getresidual_prealloc(res::CuArray{T,1}, m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
     Nxx, Nyy, Nzz = size(m)
-    function kernel(f, res, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, Δt, g, g_prev)
+    function kernel(f, res, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, mV_mul, Δt, g, g_prev)
    	i = (blockIdx().x-1) * blockDim().x + threadIdx().x
         j = (blockIdx().y-1) * blockDim().y + threadIdx().y
         k = (blockIdx().z-1) * blockDim().z + threadIdx().z
@@ -293,7 +290,7 @@ function _getresidual_prealloc(res::CuArray{T,1}, m::Reservoir_Model{T, CuArray{
 	    g12 = j==Ny ? zero(T) : g[2nd+2Nz]
 	    g13 = i==Nx ? zero(T) : g[2nd+2Nz*Ny-1]
 	    g14 = i==Nx ? zero(T) : g[2nd+2Nz*Ny]
-            rw, ro = f(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14, g_prev[2nd-1], g_prev[2nd], i, j, k, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, Δt)  
+            rw, ro = f(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14, g_prev[2nd-1], g_prev[2nd], i, j, k, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, mV_mul, Δt)  
 	    res[2nd-1] = rw
 	    res[2nd] = ro
     	end
@@ -307,7 +304,7 @@ function _getresidual_prealloc(res::CuArray{T,1}, m::Reservoir_Model{T, CuArray{
     threads     = (threads_x, threads_y, threads_z)
     blocks      = ceil.(Int, (Nxx, Nyy, Nzz) ./ threads)
 
-    @cuda threads=threads blocks=blocks kernel(_residual_cell, res, m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, Δt, g, g_prev)
+    @cuda threads=threads blocks=blocks kernel(_residual_cell, res, m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, m.V_mul, Δt, g, g_prev)
     return
 end
 ############## TEST FOR SCALED JACOBIAN #########################
@@ -333,7 +330,7 @@ function _getjacobian_array2(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArra
 end
 function _getjacobian_array_prealloc2(jA::CuArray{T,2}, wA::CuArray{T, 2}, m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
     Nxx, Nyy, Nzz = size(m)
-    function kernel(f, jA, wA, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, Δt, g, g_prev)
+    function kernel(f, jA, wA, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, mV_mul, Δt, g, g_prev)
         i = (blockIdx().x-1) * blockDim().x + threadIdx().x
         j = (blockIdx().y-1) * blockDim().y + threadIdx().y
         k = (blockIdx().z-1) * blockDim().z + threadIdx().z
@@ -358,7 +355,7 @@ function _getjacobian_array_prealloc2(jA::CuArray{T,2}, wA::CuArray{T, 2}, m::Re
             g13 = i==Nx ? zero(T) : g[2nd+2Ny*Nz-1]
             g14 = i==Nx ? zero(T) : g[2nd+2Ny*Nz]
             ginput = SVector{14}(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14)
-            J2 = ForwardDiff.jacobian(g->SVector{2}(f(g[1], g[2], g[3], g[4], g[5], g[6], g[7], g[8], g[9], g[10], g[11], g[12], g[13], g[14], g_prev[2nd-1], g_prev[2nd], i, j, k, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, Δt)), ginput)
+            J2 = ForwardDiff.jacobian(g->SVector{2}(f(g[1], g[2], g[3], g[4], g[5], g[6], g[7], g[8], g[9], g[10], g[11], g[12], g[13], g[14], g_prev[2nd-1], g_prev[2nd], i, j, k, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, mV_mul, Δt)), ginput)
 	    Jcenter    = (SMatrix{2,2}(J2[1,7], J2[2,7], J2[1,8], J2[2,8]))
 	    J = Jcenter \ J2
 	    invJcenter = inv(Jcenter)
@@ -405,7 +402,7 @@ function _getjacobian_array_prealloc2(jA::CuArray{T,2}, wA::CuArray{T, 2}, m::Re
     threads     = (threads_x, threads_y, threads_z)
     blocks      = ceil.(Int, (Nxx, Nyy, Nzz) ./ threads)
 
-    @cuda threads=threads blocks=blocks kernel(_residual_cell, jA, wA, m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, Δt, g, g_prev)
+    @cuda threads=threads blocks=blocks kernel(_residual_cell, jA, wA, m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, m.V_mul, Δt, g, g_prev)
 end
 
 ###---------------------------------------------------------------------
@@ -461,7 +458,7 @@ function _getjacobian_array(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray
 end
 function _getjacobian_array_prealloc(jA::CuArray{T,2}, m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
     Nxx, Nyy, Nzz = size(m)
-    function kernel(f, jA, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, Δt, g, g_prev)
+    function kernel(f, jA, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, mV_mul, Δt, g, g_prev)
         i = (blockIdx().x-1) * blockDim().x + threadIdx().x
         j = (blockIdx().y-1) * blockDim().y + threadIdx().y
         k = (blockIdx().z-1) * blockDim().z + threadIdx().z
@@ -486,7 +483,7 @@ function _getjacobian_array_prealloc(jA::CuArray{T,2}, m::Reservoir_Model{T, CuA
             g13 = i==Nx ? zero(T) : g[2nd+2Ny*Nz-1]
             g14 = i==Nx ? zero(T) : g[2nd+2Ny*Nz]
 	    ginput = SVector{14}(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14)
-	    J = ForwardDiff.jacobian(g->SVector{2}(f(g[1], g[2], g[3], g[4], g[5], g[6], g[7], g[8], g[9], g[10], g[11], g[12], g[13], g[14], g_prev[2nd-1], g_prev[2nd], i, j, k, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, Δt)), ginput)
+	    J = ForwardDiff.jacobian(g->SVector{2}(f(g[1], g[2], g[3], g[4], g[5], g[6], g[7], g[8], g[9], g[10], g[11], g[12], g[13], g[14], g_prev[2nd-1], g_prev[2nd], i, j, k, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, mV_mul,  Δt)), ginput)
 	    jA[2nd, 1]    = J[2,1]
 	    jA[2nd, 2]    = J[2,2]
 	    jA[2nd-1, 2]  = J[1,1]
@@ -526,5 +523,5 @@ function _getjacobian_array_prealloc(jA::CuArray{T,2}, m::Reservoir_Model{T, CuA
     threads     = (threads_x, threads_y, threads_z)
     blocks      = ceil.(Int, (Nxx, Nyy, Nzz) ./ threads)
 
-    @cuda threads=threads blocks=blocks kernel(_residual_cell, jA,  m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, Δt, g, g_prev)
+    @cuda threads=threads blocks=blocks kernel(_residual_cell, jA,  m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, m.V_mul, Δt, g, g_prev)
 end
