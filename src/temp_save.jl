@@ -182,3 +182,30 @@ end
             norm_RES, norm_dg = norm(RES), norm(gmresresult[1])
             @show norm_RES, norm_dg
             =#
+
+
+
+	      #=
+    Flux_w_west  = T_w_west * (p_w_im1jk - p_w_ijk - (mρ_w(p_w_ijk) + mρ_w(p_w_im1jk))/2 * (mz[im1,j,k]-mz[i,j,k])/144)
+    Flux_w_east  = T_w_east * (p_w_ip1jk - p_w_ijk - (mρ_w(p_w_ijk) + mρ_w(p_w_ip1jk))/2 * (mz[ip1,j,k]-mz[i,j,k])/144)
+    Flux_w_south = T_w_south * (p_w_ijm1k - p_w_ijk - (mρ_w(p_w_ijk) + mρ_w(p_w_ijm1k))/2 * (mz[i,jm1,k]-mz[i,j,k])/144)
+    Flux_w_north = T_w_north * (p_w_ijp1k - p_w_ijk - (mρ_w(p_w_ijk) + mρ_w(p_w_ijp1k))/2 * (mz[i,jp1,k]-mz[i,j,k])/144)
+    Flux_w_below = T_w_below * (p_w_ijkm1 - p_w_ijk - (mρ_w(p_w_ijk) + mρ_w(p_w_ijkm1))/2 * (mz[i,j,km1]-mz[i,j,k])/144)
+    Flux_w_above = T_w_above * (p_w_ijkp1 - p_w_ijk - (mρ_w(p_w_ijk) + mρ_w(p_w_ijkp1))/2 * (mz[i,j,kp1]-mz[i,j,k])/144)
+
+    Flux_o_west  = T_o_west * (p_o_im1jk - p_o_ijk - (mρ_o(p_o_ijk) + mρ_o(p_o_im1jk))/2 * (mz[im1,j,k]-mz[i,j,k])/144)
+    Flux_o_east  = T_o_east * (p_o_ip1jk - p_o_ijk - (mρ_o(p_o_ijk) + mρ_o(p_o_ip1jk))/2 * (mz[ip1,j,k]-mz[i,j,k])/144)
+    Flux_o_south = T_o_south * (p_o_ijm1k - p_o_ijk - (mρ_o(p_o_ijk) + mρ_o(p_o_ijm1k))/2 * (mz[i,jm1,k]-mz[i,j,k])/144)
+    Flux_o_north = T_o_north * (p_o_ijp1k - p_o_ijk - (mρ_o(p_o_ijk) + mρ_o(p_o_ijp1k))/2 * (mz[i,jp1,k]-mz[i,j,k])/144)
+    Flux_o_below = T_o_below * (p_o_ijkm1 - p_o_ijk - (mρ_o(p_o_ijk) + mρ_o(p_o_ijkm1))/2 * (mz[i,j,km1]-mz[i,j,k])/144)
+    Flux_o_above = T_o_above * (p_o_ijkp1 - p_o_ijk - (mρ_o(p_o_ijk) + mρ_o(p_o_ijkp1))/2 * (mz[i,j,kp1]-mz[i,j,k])/144)
+
+
+
+    ###---------------------------------------------------------------------
+    ### Calculate Residuals
+    ###---------------------------------------------------------------------
+    residual_w = Flux_w_west + Flux_w_east + Flux_w_south + Flux_w_north + Flux_w_above + Flux_w_below - well_w - (V_ijk*S_w_ijk*mρ_w(p_w_ijk) - V_ijk_prev*S_w_prev*mρ_w(p_w_prev))/Δt - q_w*mρ_w(p_w_ijk)
+
+    residual_o = Flux_o_west + Flux_o_east + Flux_o_south + Flux_o_north + Flux_o_above + Flux_o_below - well_o - (V_ijk*S_o_ijk*mρ_o(p_o_ijk) - V_ijk_prev*S_o_prev*mρ_o(p_o_prev))/Δt
+    =#

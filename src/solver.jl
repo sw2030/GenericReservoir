@@ -1,12 +1,11 @@
 using LinearAlgebra
 
-function Solve_SPE10(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;prec="CPR-LSPS", tol_relnorm=1e-3, tol_gmres=1e-2, n_restart=10, n_iter=10, n_prec=7, step_init=0, iftol2=false, arg2=(1e-1, 100, 30, 31), CPR_tol=1e-2, CPR_iter=10, CPR_prec=(7, 7), CPR_restart=10) where {T}
+function Solve_SPE10(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;prec="CPR-LSPS", tol_relnorm=1e-3, tol_gmres=1e-2, n_restart=10, n_iter=10, n_prec=7, step_init=0, iftol2=false, arg2=(1e-1, 100, 30, 31), CPR_tol=1e-2, CPR_iter=10, CPR_prec=(7, 7), CPR_restart=10, iternumtol=7) where {T}
 
 
 	record_p   = zeros(2, n_steps)
     	psgrid_old = copy(g_guess)
     	psgrid_new = copy(psgrid_old)
-    	errorlog   = []
     	runtime = 0.0
     	itercount_total_c, itercount_total_d, t_init_save = 0, 0, t_init
 	#### Print Arguments
@@ -30,26 +29,26 @@ function Solve_SPE10(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;prec="
                 		Δt *= 0.5
                 		itercount_div += gmresitercount
                 		gmresnumcount, gmresitercount = 0, 0
-                		RES = getresidual(m, Δt, psgrid_new, psgrid_old)
+                		getresidual!(m, Δt, psgrid_new, psgrid_old, RES)
                 		norm_RES = norm(RES)
                 		println("\nNot Converged, Δt reduced... Δt : ",Δt*2.0, "->", Δt,"\n\nSTEP ", steps+step_init, " | norm_RES : ", norm_RES, " | Δt : ",Δt)
 			end
 	    		#### Calculate JAC, RES
-	    		JAC, precP, precE, diagW = getjacobian2(m, Δt, psgrid_new, psgrid_old)
-			RES_scaled = diagW * RES
+			JAC, precP, precE, diagW = getjacobian_scaled(m, Δt, psgrid_new, psgrid_old)
+			copyto!(RES, diagW*RES)
+			#JAC, precP, precE = getjacobian(m, Δt, psgrid_new, psgrid_old)
 			
 			#### Linsolve
 			print("LinSolve start...")
-			dg, gmreserr, Linsolveiter, log = prec=="CPR-LSPS" ? CPR_LinSolve(RES_scaled, JAC, precP, precE, CPR_tol, CPR_iter, CPR_prec, CPR_restart, tol_gmres, n_iter, n_restart) : LSPS_LinSolve(RES, J, P, E, tol_gmres, n_prec, n_iter, n_restart)
+			dg, gmreserr, Linsolveiter, log = prec=="CPR-LSPS" ? CPR_LinSolve(RES, JAC, precP, precE, CPR_tol, CPR_iter, CPR_prec, CPR_restart, tol_gmres, n_iter, n_restart) : LSPS_LinSolve(RES, JAC, precP, precE, tol_gmres, n_prec, n_iter, n_restart)
 			println("...LinSolve done  ||  Iter : ",Linsolveiter, " || rel_err : ",gmreserr)
 	
 		   	#### Update and Print
-			push!(errorlog, log)
 			gmresnumcount += 1
 			gmresitercount += Linsolveiter[1]
 			prec=="CPR-LSPS" ? inneritercount+=Linsolveiter[2] : nothing
 			LinearAlgebra.axpy!(-1.0, dg, psgrid_new) # Update step
-			RES = getresidual(m, Δt, psgrid_new, psgrid_old)
+			getresidual!(m, Δt, psgrid_new, psgrid_old, RES)
 			norm_RES, norm_dg = norm(RES), norm(dg)
 			@show norm_RES, norm_dg
 			if isnan(norm_RES) norm_RES=1.0e10 end
@@ -62,7 +61,7 @@ function Solve_SPE10(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;prec="
 		itercount_total_c += gmresitercount
 		itercount_total_d += itercount_div
 		if t_init>2000 break end
-		if (gmresnumcount < 8)
+		if (gmresnumcount < iternumtol)
 			if (Δt>25.0&& Δt<=50.0) Δt=50.0 end
 			if Δt<=25.0 Δt *= 2.0 end
 		end
@@ -71,7 +70,7 @@ function Solve_SPE10(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;prec="
 		println("Runtime on this step : ", stepruntime, " | Total Runtime : ", runtime)
 	end
 	println("\nTotal Days : ",t_init-t_init_save ," | Total iteration(converge) : ", itercount_total_c, " | Total iteration(diverge) : ", itercount_total_d)
-	return psgrid_new, record_p, errorlog
+	return psgrid_new, record_p
 end
 
 function print_final(steps, t_init, Δt, psgrid_old, record_p, gmresitercount, itercount_div, inneritercount, griddiff)
@@ -99,6 +98,7 @@ function CPR_LinSolve(RES, J, P, E, CPR_tol, CPR_iter, CPR_prec, CPR_restart, to
 	return gmresresult[1], gmresresult[4], (gmresresult[3], sum(inneriter)), gmresresult[5]
 end
 function LSPS_LinSolve(RES, J, P, E, tol_gmres, n_prec, n_iter, n_restart)
+	triLU!(P)
 	gmresresult = gmres(J, RES, n_restart;maxiter=n_iter, M=(t->lsps_prec(P, E, n_prec, t)), tol=tol_gmres);
 	return gmresresult[1], gmresresult[4], gmresresult[3], gmresresult[5]
 end

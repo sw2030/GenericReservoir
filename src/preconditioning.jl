@@ -2,14 +2,14 @@ using DIA, LinearAlgebra, CuArrays, StaticArrays
 
 #### LSP preconditioner ### THREADS and Nxy/Nz size determined for SPE10 specifically
 function lsps_prec(P, E::SparseMatrixDIA{T}, n, x) where {T}
-    result = zero(x)
+    result = similar(x)
     triLU_solve!(P, x, result) #result = P^-1*x
     tmp1 = copy(result)
-    tmp2 = zero(x)
+    tmp2 = similar(x)
     for i in 1:n
-        BLAS.gemv!('N',  one(T), E, tmp1, zero(T), tmp2) # tmp2 = E * tmp1
-	triLU_solve!(P, -tmp2, tmp1) # = tmp1 = -P^-1 * tmp2
-        LinearAlgebra.axpy!(one(T), tmp1, result)
+        BLAS.gemv!('N', -one(T), E, tmp1, zero(T), tmp2) # tmp2 = E * tmp1
+	triLU_solve!(P, tmp2, tmp1) # = tmp1 = -P^-1 * tmp2
+        LinearAlgebra.axpy!(one(T), tmp1, result) #result += tmp1
     end
     return result
 end

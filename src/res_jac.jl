@@ -160,7 +160,7 @@ function _residual_cell(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, 
     mkro_ijp1k = S_w_ijp1k<0.2 ? 1.0 : (S_w_ijp1k>0.8 ? 0.0 : mk_r_o(S_w_ijp1k))
     mkro_ijkm1 = S_w_ijkm1<0.2 ? 1.0 : (S_w_ijkm1>0.8 ? 0.0 : mk_r_o(S_w_ijkm1))
     mkro_ijkp1 = S_w_ijkp1<0.2 ? 1.0 : (S_w_ijkp1>0.8 ? 0.0 : mk_r_o(S_w_ijkp1))
-
+    
     ###---------------------------------------------------------------------
     ### Compute Relative Permeability
     ###---------------------------------------------------------------------
@@ -212,30 +212,29 @@ function _residual_cell(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, 
     well_o     = PI==0.0 ? 0.0 : PI*Φ_diff_o*mkro_ijk*mρ_o(p_o_ijk)/mμ_o
     well_w     = PI==0.0 ? 0.0 : PI*Φ_diff_w*mkrw_ijk*mρ_w(p_w_ijk)/mμ_w
     
-    Flux_w_west  = T_w_west * (p_w_im1jk - p_w_ijk - (mρ_w(p_w_ijk) + mρ_w(p_w_im1jk))/2 * (mz[im1,j,k]-mz[i,j,k])/144)
-    Flux_w_east  = T_w_east * (p_w_ip1jk - p_w_ijk - (mρ_w(p_w_ijk) + mρ_w(p_w_ip1jk))/2 * (mz[ip1,j,k]-mz[i,j,k])/144)
-    Flux_w_south = T_w_south * (p_w_ijm1k - p_w_ijk - (mρ_w(p_w_ijk) + mρ_w(p_w_ijm1k))/2 * (mz[i,jm1,k]-mz[i,j,k])/144)
-    Flux_w_north = T_w_north * (p_w_ijp1k - p_w_ijk - (mρ_w(p_w_ijk) + mρ_w(p_w_ijp1k))/2 * (mz[i,jp1,k]-mz[i,j,k])/144)
-    Flux_w_below = T_w_below * (p_w_ijkm1 - p_w_ijk - (mρ_w(p_w_ijk) + mρ_w(p_w_ijkm1))/2 * (mz[i,j,km1]-mz[i,j,k])/144)
-    Flux_w_above = T_w_above * (p_w_ijkp1 - p_w_ijk - (mρ_w(p_w_ijk) + mρ_w(p_w_ijkp1))/2 * (mz[i,j,kp1]-mz[i,j,k])/144)
+    residual_w = T_w_west*(Φ_w_im1jk - Φ_w_ijk)   +
+                         T_w_east*(Φ_w_ip1jk - Φ_w_ijk)   +
+                         T_w_south*(Φ_w_ijm1k - Φ_w_ijk)  +
+                         T_w_north*(Φ_w_ijp1k - Φ_w_ijk)  +
+                         T_w_above*(Φ_w_ijkp1 - Φ_w_ijk)  +
+                         T_w_below*(Φ_w_ijkm1 - Φ_w_ijk)  -
+                         q_w*mρ_w(p_w_ijk)                -
+                         well_w                            -
+                         (V_ijk*S_w_ijk*mρ_w(p_w_ijk)     -
+                         V_ijk_prev*S_w_prev*mρ_w(p_w_prev))/Δt
 
-    Flux_o_west  = T_o_west * (p_o_im1jk - p_o_ijk - (mρ_o(p_o_ijk) + mρ_o(p_o_im1jk))/2 * (mz[im1,j,k]-mz[i,j,k])/144)
-    Flux_o_east  = T_o_east * (p_o_ip1jk - p_o_ijk - (mρ_o(p_o_ijk) + mρ_o(p_o_ip1jk))/2 * (mz[ip1,j,k]-mz[i,j,k])/144)
-    Flux_o_south = T_o_south * (p_o_ijm1k - p_o_ijk - (mρ_o(p_o_ijk) + mρ_o(p_o_ijm1k))/2 * (mz[i,jm1,k]-mz[i,j,k])/144)
-    Flux_o_north = T_o_north * (p_o_ijp1k - p_o_ijk - (mρ_o(p_o_ijk) + mρ_o(p_o_ijp1k))/2 * (mz[i,jp1,k]-mz[i,j,k])/144)
-    Flux_o_below = T_o_below * (p_o_ijkm1 - p_o_ijk - (mρ_o(p_o_ijk) + mρ_o(p_o_ijkm1))/2 * (mz[i,j,km1]-mz[i,j,k])/144)
-    Flux_o_above = T_o_above * (p_o_ijkp1 - p_o_ijk - (mρ_o(p_o_ijk) + mρ_o(p_o_ijkp1))/2 * (mz[i,j,kp1]-mz[i,j,k])/144)
-
+    residual_o   = T_o_west*(Φ_o_im1jk - Φ_o_ijk)   +
+                         T_o_east*(Φ_o_ip1jk - Φ_o_ijk)   +
+                         T_o_south*(Φ_o_ijm1k - Φ_o_ijk)  +
+                         T_o_north*(Φ_o_ijp1k - Φ_o_ijk)  +
+                         T_o_above*(Φ_o_ijkp1 - Φ_o_ijk)  +
+                         T_o_below*(Φ_o_ijkm1 - Φ_o_ijk)  -
+                         well_o                            -
+                         (V_ijk*S_o_ijk*mρ_o(p_o_ijk)     -
+                         V_ijk_prev*S_o_prev*mρ_o(p_o_prev))/Δt
 
     
-    ###---------------------------------------------------------------------
-    ### Calculate Residuals
-    ###---------------------------------------------------------------------
-    residual_w = Flux_w_west + Flux_w_east + Flux_w_south + Flux_w_north + Flux_w_above + Flux_w_below - well_w - (V_ijk*S_w_ijk*mρ_w(p_w_ijk) - V_ijk_prev*S_w_prev*mρ_w(p_w_prev))/Δt - q_w*mρ_w(p_w_ijk)
-    
-    residual_o = Flux_o_west + Flux_o_east + Flux_o_south + Flux_o_north + Flux_o_above + Flux_o_below - well_o - (V_ijk*S_o_ijk*mρ_o(p_o_ijk) - V_ijk_prev*S_o_prev*mρ_o(p_o_prev))/Δt
-
-    return residual_w, residual_o
+    return residual_o, residual_w
     
 end
 _residual_cell_pre(m, Δt, g, g_prev, i, j, k) = _residual_cell(g...,  g_prev[1], g_prev[2], i, j, k, m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, m.V_mul, Δt)
@@ -256,10 +255,25 @@ function getresidual(m::Reservoir_Model{T, Array{T,3}}, Δt, g::Array{T,1}, g_pr
     end
     return res
 end
+function getresidual!(m::Reservoir_Model{T, Array{T,3}}, Δt, g::Array{T,1}, g_prev::Array{T,1}, res::Array{T,1}) where {T}
+    Nx, Ny, Nz = size(m)
+    z = zeros(T, 2)
+    for i in 1:Nx, j in 1:Ny, k in 1:Nz
+        nd = (i-1) * Ny * Nz + (j-1) * Nz + k
+        input = (i==1 ? z : g[2nd-2Ny*Nz-1:2nd-2Ny*Nz], j==1 ? z : g[2nd-2Nz-1:2nd-2Nz], k==1 ? z : g[2nd-3:2nd-2],
+                  g[2nd-1:2nd], k==Nz ? z : g[2nd+1:2nd+2], j==Ny ? z : g[2nd+2Nz-1:2nd+2Nz], i==Nx ? z : g[2nd+2Ny*Nz-1:2nd+2Ny*Nz])
+        res[2nd-1:2nd] .= _residual_cell_pre(m, Δt, [input[b][a] for a in 1:2, b in 1:7][:], g_prev[2nd-1:2nd], i, j, k)
+    end
+    return res
+end
 
 ## Residual GPU version
 function getresidual(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
-    res = zero(g) #Later replace with similar
+    res = zero(g)
+    _getresidual_prealloc(res, m, Δt, g, g_prev)
+    return res
+end
+function getresidual!(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}, res::CuArray{T,1}) where {T}
     _getresidual_prealloc(res, m, Δt, g, g_prev)
     return res
 end
@@ -303,16 +317,16 @@ function _getresidual_prealloc(res::CuArray{T,1}, m::Reservoir_Model{T, CuArray{
     threads_z   = min(max_threads ÷ threads_x ÷ threads_y, Nzz)
     threads     = (threads_x, threads_y, threads_z)
     blocks      = ceil.(Int, (Nxx, Nyy, Nzz) ./ threads)
-
     @cuda threads=threads blocks=blocks kernel(_residual_cell, res, m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, m.V_mul, Δt, g, g_prev)
     return
 end
+
 ############## TEST FOR SCALED JACOBIAN #########################
-function getjacobian2(m::Reservoir_Model{T}, Δt, g::AbstractVector, g_prev::AbstractVector) where {T}
+function getjacobian_scaled(m::Reservoir_Model{T}, Δt, g::AbstractVector, g_prev::AbstractVector) where {T}
     Nx, Ny, Nz = size(m)
     Nyz = Ny*Nz
     N = Nx*Ny*Nz
-    jA, wA = _getjacobian_array2(m, Δt, g, g_prev)
+    jA, wA = _getjacobian_array_scaled(m, Δt, g, g_prev)
     diagbandj = [-2Nyz-1, -2Nyz, -2Nyz+1, -2Nz-1, -2Nz, -2Nz+1, -3, -2, -1, 0, 1, 2, 3, 2Nz-1, 2Nz, 2Nz+1, 2Nyz-1, 2Nyz, 2Nyz+1]
     diagidxj  = [(diagbandj[i]<0) ? (-diagbandj[i]+1:2N) : (1:2N-diagbandj[i]) for i in 1:length(diagbandj)]
     J = SparseMatrixDIA(Tuple(diagbandj[i]=>view(jA, diagidxj[i], i) for i in 1:length(diagbandj)), 2N, 2N)
@@ -321,14 +335,14 @@ function getjacobian2(m::Reservoir_Model{T}, Δt, g::AbstractVector, g_prev::Abs
     diagW = SparseMatrixDIA((-1=>view(wA, 2:2N, 1), 0=>view(wA, :, 2), 1=>view(wA, 1:2N-1, 3)), 2N, 2N)
     return J, P, E, diagW
 end
-function _getjacobian_array2(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
+function _getjacobian_array_scaled(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
     Nx, Ny, Nz = size(m)
     jA = cuzeros(T, 2*Nx*Ny*Nz, 19)
     wA = cuzeros(T, 2*Nx*Ny*Nz, 3)
-    _getjacobian_array_prealloc2(jA, wA, m, Δt, g, g_prev)
+    _getjacobian_array_prealloc_scaled(jA, wA, m, Δt, g, g_prev)
     return jA, wA
 end
-function _getjacobian_array_prealloc2(jA::CuArray{T,2}, wA::CuArray{T, 2}, m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
+function _getjacobian_array_prealloc_scaled(jA::CuArray{T,2}, wA::CuArray{T, 2}, m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
     Nxx, Nyy, Nzz = size(m)
     function kernel(f, jA, wA, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, mV_mul, Δt, g, g_prev)
         i = (blockIdx().x-1) * blockDim().x + threadIdx().x
