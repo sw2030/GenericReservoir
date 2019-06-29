@@ -539,3 +539,43 @@ function _getjacobian_array_prealloc(jA::CuArray{T,2}, m::Reservoir_Model{T, CuA
 
     @cuda threads=threads blocks=blocks kernel(_residual_cell, jA,  m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, m.V_mul, Δt, g, g_prev)
 end
+
+###---------------------------------------------------------------------
+### Calculating oil production only
+###---------------------------------------------------------------------
+function _calculate_oil_prod(m::Reservoir_Model{T}, Δt, i, j, k, p, s) where {T}
+	S_w_ijk = s
+	p_o_ijk = p
+	p_bth = 4000.0
+	ρ = 53.0*exp(1.4e-6*(p-6000.0))
+	mkro_ijk   = S_w_ijk<0.2   ? 1.0 : (S_w_ijk>0.8   ? 0.0 : m.k_r_o(S_w_ijk))
+        PI = m.q_oil[i,j,k] > 0 ? 7.06e-3*((m.k[1][i+1,j+1,k+1]))*m.Δ[3][i,j,k]/m.logr[i,j,k] : 0.0
+	Φ_diff_o   = p_o_ijk-p_bth-ρ*(m.z[i,j,k])/144
+	well_o     = PI==0.0 ? 0.0 : PI*Φ_diff_o*mkro_ijk/m.μ_o
+
+	return well_o*Δt
+end
+function oil_production(m::Reservoir_Model{T}, Δt, g) where {T}
+    qo = zeros(T, 4)
+    for k in 1:85
+	i, j = 1, 1
+        nd = (i-1) * size(m)[2] * size(m)[3] + (j-1) * size(m)[3] + k
+	qo[1] += _calculate_oil_prod(m, Δt, i, j, k, g[2nd-1], g[2nd])
+    end
+    for k in 1:85
+	i, j = 60, 1
+        nd = (i-1) * size(m)[2] * size(m)[3] + (j-1) * size(m)[3] + k
+	qo[2] += _calculate_oil_prod(m, Δt, i, j, k, g[2nd-1], g[2nd])
+    end
+    for k in 1:85
+     	i, j = 1, 220
+        nd = (i-1) * size(m)[2] * size(m)[3] + (j-1) * size(m)[3] + k
+	qo[3] += _calculate_oil_prod(m, Δt, i, j, k, g[2nd-1], g[2nd])
+    end
+    for k in 1:85
+	i, j = 60, 220
+        nd = (i-1) * size(m)[2] * size(m)[3] + (j-1) * size(m)[3] + k
+	qo[4] += _calculate_oil_prod(m, Δt, i, j, k, g[2nd-1], g[2nd])
+    end
+    return qo
+end

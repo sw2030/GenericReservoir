@@ -27,8 +27,8 @@ end
 function CPR_LSPS(J, P, E, Jp, Pp, Ep, RES, tol_gmres, n_iter, n_prec, n_restart, itercount)
     ## Page 3 of https://www.onepetro.org/download/journal-paper/SPE-106237-PA?id=journal-paper%2FSPE-106237-PA 
     xp = gmres(Jp, RES[1:2:end], n_restart;maxiter=n_iter, M=(t->lsps_prec(Pp, Ep, n_prec[1], t)), tol=tol_gmres) #(2)
-    push!(itercount, xp[3])
+    push!(itercount, xp[2])
     s = zero(RES)
     s[1:2:end] .+= xp[1] #(3)
-    return s + lsps_prec(P, E, n_prec[2], RES-J*s)
+   return s + lsps_prec(P, E, n_prec[2], RES-J*s)
 end
