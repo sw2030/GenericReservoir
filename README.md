@@ -16,6 +16,7 @@ Reservoir Simulator works on Generic Number types
 ## SPE10 Simulation(In REPL) 
 ### Setup
 ```
+]add CUDAnative#v2.1.2 ## Latest CUDAnative might not work perfectly with StaticArrays.jl ldiv!
 include("test.jl")
 ```
 ### Simulation

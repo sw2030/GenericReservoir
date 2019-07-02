@@ -15,9 +15,9 @@ function lsps_prec(P, E::SparseMatrixDIA{T}, n, x) where {T}
 end
 function CPR_Setup!(J, P, E)
     Jidx = [2, 5, 8, 10, 12, 15, 18]
-    Jp = SparseMatrixDIA(Tuple((J.diags[i].first>>1)=>J.diags[i].second[1:2:end] for i in Jidx), size(J,1)>>1, size(J,1)>>1)
-    Pp = SparseMatrixDIA(Tuple(Jp.diags[i].first=>copy(Jp.diags[i].second) for i in [3,4,5]), size(Jp)...)
-    Ep = SparseMatrixDIA(Tuple(Jp.diags[i].first=>Jp.diags[i].second for i in [1,2,6,7]), size(Jp)...)
+    Jp = SparseMatrixDIA([(J.diags[i].first>>1)=>J.diags[i].second[1:2:end] for i in Jidx], size(J,1)>>1, size(J,1)>>1)
+    Pp = SparseMatrixDIA([Jp.diags[i].first=>copy(Jp.diags[i].second) for i in [3,4,5]], size(Jp)...)
+    Ep = SparseMatrixDIA([Jp.diags[i].first=>Jp.diags[i].second for i in [1,2,6,7]], size(Jp)...)
 
     triLU!(P)
     triLU!(Pp)

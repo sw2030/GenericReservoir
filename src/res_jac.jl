@@ -304,7 +304,7 @@ function _getresidual_prealloc(res::CuArray{T,1}, m::Reservoir_Model{T, CuArray{
 	    g12 = j==Ny ? zero(T) : g[2nd+2Nz]
 	    g13 = i==Nx ? zero(T) : g[2nd+2Nz*Ny-1]
 	    g14 = i==Nx ? zero(T) : g[2nd+2Nz*Ny]
-            rw, ro = f(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14, g_prev[2nd-1], g_prev[2nd], i, j, k, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, mV_mul, Δt)  
+        rw, ro = f(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14, g_prev[2nd-1], g_prev[2nd], i, j, k, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, mV_mul, Δt)  
 	    res[2nd-1] = rw
 	    res[2nd] = ro
     	end
@@ -329,10 +329,10 @@ function getjacobian_scaled(m::Reservoir_Model{T}, Δt, g::AbstractVector, g_pre
     jA, wA = _getjacobian_array_scaled(m, Δt, g, g_prev)
     diagbandj = [-2Nyz-1, -2Nyz, -2Nyz+1, -2Nz-1, -2Nz, -2Nz+1, -3, -2, -1, 0, 1, 2, 3, 2Nz-1, 2Nz, 2Nz+1, 2Nyz-1, 2Nyz, 2Nyz+1]
     diagidxj  = [(diagbandj[i]<0) ? (-diagbandj[i]+1:2N) : (1:2N-diagbandj[i]) for i in 1:length(diagbandj)]
-    J = SparseMatrixDIA(Tuple(diagbandj[i]=>view(jA, diagidxj[i], i) for i in 1:length(diagbandj)), 2N, 2N)
-    P = SparseMatrixDIA(Tuple(J.diags[i].first=>copy(J.diags[i].second) for i in [7,8,9,10,11,12,13]), 2N, 2N)
-    E = SparseMatrixDIA(Tuple(J.diags[i].first=>J.diags[i].second for i in [1,2,3,4,5,6,14,15,16,17,18,19]), 2N, 2N)
-    diagW = SparseMatrixDIA((-1=>view(wA, 2:2N, 1), 0=>view(wA, :, 2), 1=>view(wA, 1:2N-1, 3)), 2N, 2N)
+    J = SparseMatrixDIA([diagbandj[i]=>view(jA, diagidxj[i], i) for i in 1:length(diagbandj)], 2N, 2N)
+    P = SparseMatrixDIA([J.diags[i].first=>copy(J.diags[i].second) for i in [7,8,9,10,11,12,13]], 2N, 2N)
+    E = SparseMatrixDIA([J.diags[i].first=>J.diags[i].second for i in [1,2,3,4,5,6,14,15,16,17,18,19]], 2N, 2N)
+    diagW = SparseMatrixDIA([-1=>view(wA, 2:2N, 1), 0=>view(wA, :, 2), 1=>view(wA, 1:2N-1, 3)], 2N, 2N)
     return J, P, E, diagW
 end
 function _getjacobian_array_scaled(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
@@ -370,10 +370,10 @@ function _getjacobian_array_prealloc_scaled(jA::CuArray{T,2}, wA::CuArray{T, 2},
             g14 = i==Nx ? zero(T) : g[2nd+2Ny*Nz]
             ginput = SVector{14}(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14)
             J2 = ForwardDiff.jacobian(g->SVector{2}(f(g[1], g[2], g[3], g[4], g[5], g[6], g[7], g[8], g[9], g[10], g[11], g[12], g[13], g[14], g_prev[2nd-1], g_prev[2nd], i, j, k, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, mV_mul, Δt)), ginput)
-	    Jcenter    = (SMatrix{2,2}(J2[1,7], J2[2,7], J2[1,8], J2[2,8]))
-	    J = Jcenter \ J2
-	    invJcenter = inv(Jcenter)
-	    jA[2nd, 1]    = J[2,1]
+	    	Jcenter    = (SMatrix{2,2}(J2[1,7], J2[2,7], J2[1,8], J2[2,8]))
+	    	J = Jcenter \ J2
+	    	invJcenter = inv(Jcenter)
+	    	jA[2nd, 1]    = J[2,1]
             jA[2nd, 2]    = J[2,2]
             jA[2nd-1, 2]  = J[1,1]
             jA[2nd-1, 3]  = J[1,2]
@@ -401,10 +401,10 @@ function _getjacobian_array_prealloc_scaled(jA::CuArray{T,2}, wA::CuArray{T, 2},
             jA[2nd, 18]   = J[2,14]
             jA[2nd-1, 18] = J[1,13]
             jA[2nd-1, 19] = J[1,14]
-	    wA[2nd-1, 2]  = invJcenter[1,1]
-	    wA[2nd-1, 3]  = invJcenter[1,2]
-	    wA[2nd, 1]    = invJcenter[2,1]
-	    wA[2nd, 2]    = invJcenter[2,2]
+	    	wA[2nd-1, 2]  = invJcenter[1, 1]
+	    	wA[2nd-1, 3]  = invJcenter[1, 2]
+	    	wA[2nd, 1]    = invJcenter[2, 1]
+	    	wA[2nd, 2]    = invJcenter[2, 2]
         end
         return
     end
@@ -430,9 +430,9 @@ function getjacobian(m::Reservoir_Model{T}, Δt, g::AbstractVector, g_prev::Abst
     jA = _getjacobian_array(m, Δt, g, g_prev)
     diagbandj = [-2Nyz-1, -2Nyz, -2Nyz+1, -2Nz-1, -2Nz, -2Nz+1, -3, -2, -1, 0, 1, 2, 3, 2Nz-1, 2Nz, 2Nz+1, 2Nyz-1, 2Nyz, 2Nyz+1]
     diagidxj  = [(diagbandj[i]<0) ? (-diagbandj[i]+1:2N) : (1:2N-diagbandj[i]) for i in 1:length(diagbandj)]
-    J = SparseMatrixDIA(Tuple(diagbandj[i]=>view(jA, diagidxj[i], i) for i in 1:length(diagbandj)), 2N, 2N)
-    P = SparseMatrixDIA(Tuple(J.diags[i].first=>copy(J.diags[i].second) for i in [7,8,9,10,11,12,13]), 2N, 2N)
-    E = SparseMatrixDIA(Tuple(J.diags[i].first=>J.diags[i].second for i in [1,2,3,4,5,6,14,15,16,17,18,19]), 2N, 2N)
+    J = SparseMatrixDIA([diagbandj[i]=>view(jA, diagidxj[i], i) for i in 1:length(diagbandj)], 2N, 2N)
+    P = SparseMatrixDIA([J.diags[i].first=>copy(J.diags[i].second) for i in [7,8,9,10,11,12,13]], 2N, 2N)
+    E = SparseMatrixDIA([J.diags[i].first=>J.diags[i].second for i in [1,2,3,4,5,6,14,15,16,17,18,19]], 2N, 2N)
     return J, P, E
 end
 function _getjacobian_array(m::Reservoir_Model{T, Array{T,3}}, Δt, g::AbstractVector, g_prev::AbstractVector) where {T}
@@ -483,44 +483,44 @@ function _getjacobian_array_prealloc(jA::CuArray{T,2}, m::Reservoir_Model{T, CuA
             #Since we are not YET allowed to allocate an input array inside CUDA kernel, we just do it elementwise here. (Reason why code is so long below)
             #input = [i==1 ? z : g[2nd-3:2nd-2], j==1 ? z : g[2nd-2Nx-1:2nd-2Nx], k==1 ? z : g[2nd-2*Nx*Ny-1:2nd-2Nx*Ny], g[2nd-1:2nd], k==Nz ? z : g[2nd+2*Nx*Ny-1:2nd+2*Nx*Ny], j==Ny ? z : g[2nd+2Nx-1:2nd+2Nx], i==Nx ? z : g[2nd+1:2nd+2]]
 	    g1 = i==1 ? zero(T) : g[2nd-2Ny*Nz-1]
-            g2 = i==1 ? zero(T) : g[2nd-2Ny*Nz]
-            g3 = j==1 ? zero(T) : g[2nd-2Nz-1]
-            g4 = j==1 ? zero(T) : g[2nd-2Nz]
+        g2 = i==1 ? zero(T) : g[2nd-2Ny*Nz]
+        g3 = j==1 ? zero(T) : g[2nd-2Nz-1]
+        g4 = j==1 ? zero(T) : g[2nd-2Nz]
 	    g5 = k==1 ? zero(T) : g[2nd-3]
-            g6 = k==1 ? zero(T) : g[2nd-2]
-            g7 = g[2nd-1]
-            g8 = g[2nd]
-            g9 = k==Nz ? zero(T) : g[2nd+1]
-            g10 = k==Nz ? zero(T) : g[2nd+2]
-            g11 = j==Ny ? zero(T) : g[2nd+2Nz-1]
-            g12 = j==Ny ? zero(T) : g[2nd+2Nz]
-            g13 = i==Nx ? zero(T) : g[2nd+2Ny*Nz-1]
-            g14 = i==Nx ? zero(T) : g[2nd+2Ny*Nz]
+        g6 = k==1 ? zero(T) : g[2nd-2]
+        g7 = g[2nd-1]
+        g8 = g[2nd]
+        g9 = k==Nz ? zero(T) : g[2nd+1]
+        g10 = k==Nz ? zero(T) : g[2nd+2]
+        g11 = j==Ny ? zero(T) : g[2nd+2Nz-1]
+        g12 = j==Ny ? zero(T) : g[2nd+2Nz]
+        g13 = i==Nx ? zero(T) : g[2nd+2Ny*Nz-1]
+        g14 = i==Nx ? zero(T) : g[2nd+2Ny*Nz]
 	    ginput = SVector{14}(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14)
 	    J = ForwardDiff.jacobian(g->SVector{2}(f(g[1], g[2], g[3], g[4], g[5], g[6], g[7], g[8], g[9], g[10], g[11], g[12], g[13], g[14], g_prev[2nd-1], g_prev[2nd], i, j, k, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, mV_mul,  Δt)), ginput)
 	    jA[2nd, 1]    = J[2,1]
 	    jA[2nd, 2]    = J[2,2]
 	    jA[2nd-1, 2]  = J[1,1]
 	    jA[2nd-1, 3]  = J[1,2]
-            jA[2nd, 4]    = J[2,3]
+        jA[2nd, 4]    = J[2,3]
 	    jA[2nd, 5]    = J[2,4]
-            jA[2nd-1, 5]  = J[1,3]
+        jA[2nd-1, 5]  = J[1,3]
 	    jA[2nd-1, 6]  = J[1,4]
-            jA[2nd, 7]    = J[2,5]
+        jA[2nd, 7]    = J[2,5]
 	    jA[2nd, 8]    = J[2,6]
 	    jA[2nd-1, 8]  = J[1,5]
 	    jA[2nd-1, 9]  = J[1,6]
-            jA[2nd, 9]    = J[2,7]
+        jA[2nd, 9]    = J[2,7]
 	    jA[2nd, 10]   = J[2,8]
-            jA[2nd-1, 10] = J[1,7]
+        jA[2nd-1, 10] = J[1,7]
 	    jA[2nd-1, 11] = J[1,8]
-            jA[2nd, 11]   = J[2,9]
+        jA[2nd, 11]   = J[2,9]
 	    jA[2nd, 12]   = J[2,10]
-            jA[2nd-1, 12] = J[1,9]
+        jA[2nd-1, 12] = J[1,9]
 	    jA[2nd-1, 13] = J[1,10]
-            jA[2nd, 14]   = J[2,11]
+        jA[2nd, 14]   = J[2,11]
 	    jA[2nd, 15]   = J[2,12]
-            jA[2nd-1, 15] = J[1,11]
+        jA[2nd-1, 15] = J[1,11]
 	    jA[2nd-1, 16] = J[1,12]
 	    jA[2nd, 17]   = J[2,13]
 	    jA[2nd, 18]   = J[2,14]
