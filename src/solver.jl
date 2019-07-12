@@ -8,13 +8,13 @@ function Solve_SPE10(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;prec="
    	psgrid_new = copy(psgrid_old)
    	runtime = 0.0
 	prod_rec = []
-   	itercount_total_c, itercount_total_d, t_init_save, jac_time_total, linsol_time_total= 0, 0, t_init, 0.0, 0.0
+   	itercount_total_c, itercount_total_d, t_init_save, jac_time_total, linsol_time_total, JAC_FUNC_CALL = 0, 0, t_init, 0.0, 0.0, 0
 	#### Print Arguments
 	print_init(tol_relnorm, tol_gmres, n_restart, n_iter, CPR_prec, CPR_restart, CPR_iter, CPR_tol, prec, n_prec)
 	
 	#### Time stepping start
     for steps in 1:n_steps
-       	stepruntime = @elapsed begin
+       	stepruntime = @elapsed CuArrays.@sync begin
 		
 		#### Initialize Each Steps
         RES = getresidual(m, Δt, psgrid_new, psgrid_old)
@@ -36,10 +36,11 @@ function Solve_SPE10(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;prec="
 			end
 	   		#### Calculate JAC, RES
 			jac_time = @elapsed CuArrays.@sync JAC, precP, precE, diagW = getjacobian_scaled(m, Δt, psgrid_new, psgrid_old)
+            JAC_FUNC_CALL += 1
 			copyto!(RES, diagW*RES)
 			
 			#### Linsolve
-			_linsol_time = @elapsed begin
+			_linsol_time = @elapsed CuArrays.@sync begin
 			print("LinSolve start...")
 			dg, gmreserr, Linsolveiter, log = prec=="CPR-LSPS" ? CPR_LinSolve(RES, JAC, precP, precE, CPR_tol, CPR_iter, CPR_prec, CPR_restart, tol_gmres, n_iter, n_restart;f=linsolf) : LSPS_LinSolve(RES, JAC, precP, precE, tol_gmres, n_prec, n_iter, n_restart;f=linsolf)
 			println("...LinSolve done  ||  Iter : ",Linsolveiter, " || rel_err : ",gmreserr)
@@ -77,13 +78,13 @@ function Solve_SPE10(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;prec="
 		if t_init>2000 break end
 	end
 	println("\nTotal Days : ",t_init-t_init_save ," | Total iteration(converge) : ", itercount_total_c, " | Total iteration(diverge) : ", itercount_total_d)
-	println("Total Linsol time : ", linsol_time_total, "sec, Total Jacobian Call time : ", jac_time_total, "sec")
+	println("Total Linsol time : ", linsol_time_total, "sec, Total Jacobian Call time : ", jac_time_total, "sec\nTotal Jacobian Function call : ", JAC_FUNC_CALL)
 	println("Total Runtime : ", runtime, "sec")
 	return psgrid_new, record_p, prod_rec
 end
 
 function print_final(steps, t_init, Δt, psgrid_old, record_p, gmresitercount, itercount_div, inneritercount, griddiff)
-	println("CPR Stage 1 iteration : ", inneritercount, "| max dp, ds : ", (maximum(abs.(Array(griddiff[1:2:end]))), maximum(abs.(Array(griddiff[2:2:end])))))
+	println("CPR Stage 1 iteration : ", inneritercount, "| max dp, ds : ", (maximum(abs.(griddiff[1:2:end])), maximum(abs.(griddiff[2:2:end]))))
     println("GMRES iteration(converge) : ",gmresitercount, " | GMRES iteration(diverge) : ", itercount_div)
 	print("Min p : ", round(minimum(psgrid_old[1:2:end]), sigdigits=6), " | Max p : ", round(maximum(psgrid_old[1:2:end]), sigdigits=6))
 	print("Min s : ", round(minimum(psgrid_old[2:2:end]), sigdigits=6), " | Max s : ", round(maximum(psgrid_old[2:2:end]), sigdigits=6))
