@@ -419,6 +419,97 @@ function _getjacobian_array_prealloc_scaled(jA::CuArray{T,2}, wA::CuArray{T, 2},
     @cuda threads=threads blocks=blocks kernel(_residual_cell, jA, wA, m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, m.V_mul, Δt, g, g_prev)
 end
 
+function getjacobian_frs(m::Reservoir_Model{T}, Δt, g::AbstractVector, g_prev::AbstractVector) where {T}
+    Nx, Ny, Nz = size(m)
+    Nyz = Ny*Nz
+    N = Nx*Ny*Nz
+    jA = _getjacobian_array_frs(m, Δt, g, g_prev)
+    diagbandj = [-2Nyz-1, -2Nyz, -2Nyz+1, -2Nz-1, -2Nz, -2Nz+1, -3, -2, -1, 0, 1, 2, 3, 2Nz-1, 2Nz, 2Nz+1, 2Nyz-1, 2Nyz, 2Nyz+1]
+    diagidxj  = [(diagbandj[i]<0) ? (-diagbandj[i]+1:2N) : (1:2N-diagbandj[i]) for i in 1:length(diagbandj)]
+    J = SparseMatrixDIA([diagbandj[i]=>view(jA, diagidxj[i], i) for i in 1:length(diagbandj)], 2N, 2N)
+    P = SparseMatrixDIA([J.diags[i].first=>copy(J.diags[i].second) for i in [7,8,9,10,11,12,13]], 2N, 2N)
+    E = SparseMatrixDIA([J.diags[i].first=>J.diags[i].second for i in [1,2,3,4,5,6,14,15,16,17,18,19]], 2N, 2N)
+    return J, P, E
+end
+function _getjacobian_array_frs(m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
+    Nx, Ny, Nz = size(m)
+    jA = cuzeros(T, 2*Nx*Ny*Nz, 19)
+    _getjacobian_array_prealloc_frs(jA, m, Δt, g, g_prev)
+    return jA
+end
+function _getjacobian_array_prealloc_frs(jA::CuArray{T,2}, m::Reservoir_Model{T, CuArray{T,3}}, Δt, g::CuArray{T,1}, g_prev::CuArray{T,1}) where {T}
+    Nxx, Nyy, Nzz = size(m)
+    function kernel(f, jA, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, mV_mul, Δt, g, g_prev)
+        i = (blockIdx().x-1) * blockDim().x + threadIdx().x
+        j = (blockIdx().y-1) * blockDim().y + threadIdx().y
+        k = (blockIdx().z-1) * blockDim().z + threadIdx().z
+
+        Nx, Ny, Nz = mdim
+        if i<=Nx && j<=Ny && k<=Nz
+            nd = (i-1) * Ny * Nz + (j-1) * Nz + k
+            #Since we are not YET allowed to allocate an input array inside CUDA kernel, we just do it elementwise here. (Reason why code is so long below)
+            #input = [i==1 ? z : g[2nd-3:2nd-2], j==1 ? z : g[2nd-2Nx-1:2nd-2Nx], k==1 ? z : g[2nd-2*Nx*Ny-1:2nd-2Nx*Ny], g[2nd-1:2nd], k==Nz ? z : g[2nd+2*Nx*Ny-1:2nd+2*Nx*Ny], j==Ny ? z : g[2nd+2Nx-1:2nd+2Nx], i==Nx ? z : g[2nd+1:2nd+2]]
+            g1 = i==1 ? zero(T) : g[2nd-2Ny*Nz-1]
+            g2 = i==1 ? zero(T) : g[2nd-2Ny*Nz]
+            g3 = j==1 ? zero(T) : g[2nd-2Nz-1]
+            g4 = j==1 ? zero(T) : g[2nd-2Nz]
+            g5 = k==1 ? zero(T) : g[2nd-3]
+            g6 = k==1 ? zero(T) : g[2nd-2]
+            g7 = g[2nd-1]
+            g8 = g[2nd]
+            g9 = k==Nz ? zero(T) : g[2nd+1]
+            g10 = k==Nz ? zero(T) : g[2nd+2]
+            g11 = j==Ny ? zero(T) : g[2nd+2Nz-1]
+            g12 = j==Ny ? zero(T) : g[2nd+2Nz]
+            g13 = i==Nx ? zero(T) : g[2nd+2Ny*Nz-1]
+            g14 = i==Nx ? zero(T) : g[2nd+2Ny*Nz]
+            ginput = SVector{14}(g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14)
+            J2 = ForwardDiff.jacobian(g->SVector{2}(f(g[1], g[2], g[3], g[4], g[5], g[6], g[7], g[8], g[9], g[10], g[11], g[12], g[13], g[14], g_prev[2nd-1], g_prev[2nd], i, j, k, mdim, mq_oil, mq_water, mΔ, mz, mk, mlogr, mϕ, mk_r_w, mk_r_o, mp_cow, mρ_w, mρ_o, mμ_w, mμ_o, mV_mul, Δt)), ginput)
+            J_frs = SMatrix{2,2}(1.0, 0.0, 1.0, 1.0)
+            J = J_frs*J2
+            jA[2nd, 1]    = J[2,1]
+            jA[2nd, 2]    = J[2,2]
+            jA[2nd-1, 2]  = J[1,1]
+            jA[2nd-1, 3]  = J[1,2]
+            jA[2nd, 4]    = J[2,3]
+            jA[2nd, 5]    = J[2,4]
+            jA[2nd-1, 5]  = J[1,3]
+            jA[2nd-1, 6]  = J[1,4]
+            jA[2nd, 7]    = J[2,5]
+            jA[2nd, 8]    = J[2,6]
+            jA[2nd-1, 8]  = J[1,5]
+            jA[2nd-1, 9]  = J[1,6]
+            jA[2nd, 9]    = J[2,7]
+            jA[2nd, 10]   = J[2,8]
+            jA[2nd-1, 10] = J[1,7]
+            jA[2nd-1, 11] = J[1,8]
+            jA[2nd, 11]   = J[2,9]
+            jA[2nd, 12]   = J[2,10]
+            jA[2nd-1, 12] = J[1,9]
+            jA[2nd-1, 13] = J[1,10]
+            jA[2nd, 14]   = J[2,11]
+            jA[2nd, 15]   = J[2,12]
+            jA[2nd-1, 15] = J[1,11]
+            jA[2nd-1, 16] = J[1,12]
+            jA[2nd, 17]   = J[2,13]
+            jA[2nd, 18]   = J[2,14]
+            jA[2nd-1, 18] = J[1,13]
+            jA[2nd-1, 19] = J[1,14]
+        end
+        return
+    end
+
+    max_threads = 256
+    threads_x   = min(max_threads, Nxx)
+    threads_y   = min(max_threads ÷ threads_x, Nyy)
+    threads_z   = min(max_threads ÷ threads_x ÷ threads_y, Nzz)
+    threads     = (threads_x, threads_y, threads_z)
+    blocks      = ceil.(Int, (Nxx, Nyy, Nzz) ./ threads)
+
+    @cuda threads=threads blocks=blocks kernel(_residual_cell, jA, m.dim, m.q_oil, m.q_water, m.Δ, m.z, m.k, m.logr, m.ϕ, m.k_r_w, m.k_r_o, m.p_cow, m.ρ_w, m.ρ_o, m.μ_w, m.μ_o, m.V_mul, Δt, g, g_prev)
+end
+
+
 ###---------------------------------------------------------------------
 ### Jacobian Assembly
 ###---------------------------------------------------------------------
