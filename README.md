@@ -18,7 +18,8 @@ Reservoir Simulator works both on CPU/GPU
 ## GPU SPE10 Simulation(In REPL) 
 ### Setup
 ```
-m, g = spe10_gpu("spe10data.h5");
+using GenericReservoir
+m, g = spe10_gpu("spe10data.h5");  ## copy data/spe10data.h5 or use your directory/filename
 testsolve(m, g);
 ```
 ### Simulation
