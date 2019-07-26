@@ -1,5 +1,3 @@
-using DIA, LinearAlgebra, CuArrays, StaticArrays
-
 #### LSP preconditioner ### THREADS and Nxy/Nz size determined for SPE10 specifically
 function lsps_prec(P, E::SparseMatrixDIA{T}, n, x) where {T}
     result = similar(x)

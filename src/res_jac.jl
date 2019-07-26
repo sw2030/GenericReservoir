@@ -1,6 +1,3 @@
-using ForwardDiff, DIA, CuArrays, CUDAnative, StaticArrays
-
-
 ## General Node convention - for coordinate i, j, k
 ## nd = (i-1) * Ny * Nz + (j-1) * Nz + k 
 

@@ -1,6 +1,4 @@
-using LinearAlgebra, CuArrays
-
-function Solve_SPE10(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;prec="CPR-LSPS", tol_relnorm=1e-3, tol_gmres=1e-2, n_restart=10, n_iter=10, n_prec=7, step_init=0, CPR_tol=1e-1, CPR_iter=10, CPR_prec=(7, 7), CPR_restart=10, iternumtol=7, linsolf=fgmres) where {T}
+function ReservoirSolve(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;prec="CPR-LSPS", tol_relnorm=1e-3, tol_gmres=1e-2, n_restart=10, n_iter=10, n_prec=7, step_init=0, CPR_tol=1e-1, CPR_iter=10, CPR_prec=(7, 7), CPR_restart=10, iternumtol=7, linsolf=fgmres) where {T}
 
 
 	record_p   = zeros(2, n_steps)

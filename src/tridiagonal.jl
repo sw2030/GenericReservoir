@@ -1,5 +1,3 @@
-using DIA, LinearAlgebra, CuArrays, StaticArrays
-
 function triLU!(P::SparseMatrixDIA{T,TF,Vector{T}}) where {T,TF}
     _triLU!(P.diags[1].second, P.diags[2].second, P.diags[3].second, 1, length(P.diags[2].second))
 end
