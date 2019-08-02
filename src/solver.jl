@@ -1,4 +1,4 @@
-function ReservoirSolve(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;prec="CPR-LSPS", tol_relnorm=1e-3, tol_gmres=1e-2, n_restart=10, n_iter=10, n_prec=7, step_init=0, CPR_tol=1e-1, CPR_iter=10, CPR_prec=(7, 7), CPR_restart=10, iternumtol=7, linsolf=fgmres) where {T}
+function ReservoirSolve(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;prec="CPR-LSPS", tol_relnorm=1e-3, tol_gmres=1e-2, n_restart=10, n_iter=10, n_prec=7, step_init=0, CPR_tol=1e-1, CPR_iter=5, CPR_prec=(15, 15), CPR_restart=15, iternumtol=7, nl_tol=10, linsolf=fgmres) where {T}
 
 
 	record_p   = zeros(2, n_steps)
@@ -19,11 +19,11 @@ function ReservoirSolve(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;pre
        	norm_RES_save = norm(RES)
        	norm_RES = norm_RES_save
        	println("\nSTEP ", steps+step_init, " | norm_RES : ", norm_RES, " | Δt : ",Δt)
-       	gmresnumcount, gmresitercount, itercount_div, inneritercount, jac_time, linsol_time = 0, 0, 0, 0, 0.0, 0.0
+       	gmresnumcount, gmresitercount, itercount_div, inneritercount, j_t, linsol_time = 0, 0, 0, 0, 0.0, 0.0
 
        	while(norm_RES/norm_RES_save>tol_relnorm)
            	#### In case it is Divergine
-    		if ((norm_RES>1e5 && steps>1) || gmresnumcount > 9 || (gmresnumcount>6 && norm_RES>1.0e4)) ### These are the conditions for reducing Δt (Not converged)
+    		if ((norm_RES>1e5 && steps>1) || gmresnumcount >= nl_tol || (gmresnumcount>6 && norm_RES>1.0e4)) ### These are the conditions for reducing Δt (Not converged)
                		copyto!(psgrid_new, psgrid_old)
                		Δt *= 0.5
                		itercount_div += gmresitercount
@@ -32,22 +32,26 @@ function ReservoirSolve(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;pre
                		norm_RES = norm(RES)
                		println("\nNot Converged, Δt reduced... Δt : ",Δt*2.0, "->", Δt,"\n\nSTEP ", steps+step_init, " | norm_RES : ", norm_RES, " | Δt : ",Δt)
 			end
-	   		#### Calculate JAC, RES
-			jac_time = @elapsed CuArrays.@sync JAC, precP, precE, diagW = getjacobian_scaled(m, Δt, psgrid_new, psgrid_old)
+
+            if prec=="LSPS"
+                dg, j_t, l_t, it_count = LinSolve_LSPS(m, Δt, RES, psgrid_old, psgrid_new, (n_restart, n_iter, tol_gmres), n_prec;linsolve=linsolf)
+            elseif prec=="CPR-LSPS"
+                dg, j_t, l_t, it_count = LinSolve_CPR_LSPS(m, Δt, RES, psgrid_old, psgrid_new, 
+                                                                (n_restart, n_iter, tol_gmres), 
+                                                                (CPR_restart, CPR_iter, CPR_tol, CPR_prec))
+            elseif prec=="CPR-MG"
+                dg, j_t, l_t, it_count = LinSolve_CPR_MG(m, Δt, RES, psgrid_old, psgrid_new,
+                                                                (n_restart, n_iter, tol_gmres), 
+                                                                (CPR_restart, CPR_iter, CPR_tol, n_prec))        
+            end
+            
             JAC_FUNC_CALL += 1
-			copyto!(RES, diagW*RES)
-			
-			#### Linsolve
-			_linsol_time = @elapsed CuArrays.@sync begin
-			print("LinSolve start...")
-			dg, gmreserr, Linsolveiter, log = prec=="CPR-LSPS" ? CPR_LinSolve(RES, JAC, precP, precE, CPR_tol, CPR_iter, CPR_prec, CPR_restart, tol_gmres, n_iter, n_restart;f=linsolf) : LSPS_LinSolve(RES, JAC, precP, precE, tol_gmres, n_prec, n_iter, n_restart;f=linsolf)
-			println("...LinSolve done  ||  Iter : ",Linsolveiter, " || rel_err : ",gmreserr)
-			end
-			linsol_time += _linsol_time
-		   	#### Update and Print
-			gmresnumcount += 1
-			gmresitercount += Linsolveiter[1]
-			prec=="CPR-LSPS" ? inneritercount+=Linsolveiter[2] : nothing
+			linsol_time += l_t
+            gmresnumcount += 1
+            gmresitercount += it_count[1]
+            inneritercount += it_count[2]
+		   	
+            #### Update and Print
 			LinearAlgebra.axpy!(-1.0, dg, psgrid_new) # Update step
 			getresidual!(m, Δt, psgrid_new, psgrid_old, RES)
 			norm_RES, norm_dg = norm(RES), norm(dg)
@@ -61,7 +65,7 @@ function ReservoirSolve(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;pre
 		t_init += Δt
 		itercount_total_c += gmresitercount
 		itercount_total_d += itercount_div
-		jac_time_total += jac_time
+		jac_time_total += j_t
 		linsol_time_total += linsol_time
 		if (gmresnumcount < iternumtol)
 			if (Δt>25.0&& Δt<=50.0) Δt=50.0 end
@@ -69,7 +73,7 @@ function ReservoirSolve(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;pre
 		end
         end
         runtime += stepruntime
-		print("Jacobian function time : ", round(jac_time, sigdigits=4))
+		print("Jacobian function time : ", round(j_t, sigdigits=4))
        	println(" | Linsol time : ", round(linsol_time, sigdigits=4), " | % of linsol : ", round(100*linsol_time/stepruntime, sigdigits=4))
 		println("Oil produced : ", Tuple(map(t->round(t, digits=3), sum(prod_rec))), " STB")
 		println("Runtime on this step : ", round(stepruntime, sigdigits=6), " | Total Runtime : ", round(runtime, sigdigits=6), "sec", )
@@ -95,14 +99,4 @@ function print_init(tol_relnorm, tol_gmres, n_restart, n_iter, CPR_prec, CPR_res
     if prec=="LSPS" println("Preconditioning : LSPS\n", "LSPS degree : ", n_prec) end
 end
 
-function CPR_LinSolve(RES, J, P, E, CPR_tol, CPR_iter, CPR_prec, CPR_restart, tol_gmres, n_iter, n_restart; f=fgmres)
-    Jp, Pp, Ep = CPR_Setup!(J, P, E)
-    inneriter = []
-    gmresresult = f(J, RES, n_restart;maxiter=n_iter, M=(t->CPR_LSPS(J, P, E, Jp, Pp, Ep, t, CPR_tol, CPR_iter, CPR_prec, CPR_restart, inneriter)), tol=tol_gmres)
-	return gmresresult[1], gmresresult[3], (gmresresult[2], sum(inneriter)), gmresresult[4]
-end
-function LSPS_LinSolve(RES, J, P, E, tol_gmres, n_prec, n_iter, n_restart; f=fgmres)
-	triLU!(P)
-	gmresresult = f(J, RES, n_restart;maxiter=n_iter, M=(t->lsps_prec(P, E, n_prec, t)), tol=tol_gmres);
-	return gmresresult[1], gmresresult[3], gmresresult[2], gmresresult[4]
-end
+

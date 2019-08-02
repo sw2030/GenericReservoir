@@ -13,6 +13,7 @@ include("gmres.jl")
 include("preconditioning.jl")
 include("solver.jl")
 include("tridiagonal.jl")
+include("linsolve.jl")
 include("spe10.jl")
 include("util.jl")
 

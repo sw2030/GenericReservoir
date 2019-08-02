@@ -22,14 +22,14 @@ function gmres(A, b, restrt::Int64; tol::Real=1e-5, maxiter::Int=200, ifprint=fa
         itersave = iter
         r = Q[1]
         copyto!(r, b)
-	BLAS.gemv!('N', -one(T), A, M(x), one(T), r)
-	fill!(s, zero(T))
+	    BLAS.gemv!('N', -one(T), A, M(x), one(T), r)
+	    fill!(s, zero(T))
         s[1] = norm(r)
         rmul!(r, inv(s[1]))
         for i in 1:restrt
             isave = i
             w = Q[i+1]
-	    BLAS.gemv!('N', one(T), A, M(Q[i]), zero(T), w)
+	        BLAS.gemv!('N', one(T), A, M(Q[i]), zero(T), w)
             for k in 1:i
                 H[k,i] = LinearAlgebra.dot(w, Q[k])
                 LinearAlgebra.axpy!(-H[k,i],Q[k],w)
@@ -97,15 +97,18 @@ function fgmres(A, b, restrt::Int64; tol::Real=1e-5, maxiter::Int=200, ifprint=f
         BLAS.gemv!('N', -one(T), A, x, one(T), r)
         fill!(s, zero(T))
         s[1] = norm(r)
+        #@show norm(r[1:2:end]), norm(r[2:2:end]), iter, inv(s[1])
         rmul!(r, inv(s[1]))
         for i in 1:restrt
             isave = i
-	    copyto!(Z[i], M(Q[i]))
-	    w = Q[i+1]
-	    LinearAlgebra.mul!(w, A, Z[i])
+	        copyto!(Z[i], M(Q[i]))
+            #@show norm(Q[i]), norm(Z[i])
+	        w = Q[i+1]
+	        LinearAlgebra.mul!(w, A, Z[i])
             for k in 1:i
                 H[k,i] = LinearAlgebra.dot(w, Q[k])
                 LinearAlgebra.axpy!(-H[k,i],Q[k],w)
+                #@show H[k,i], k, i
             end
             H[i+1,i] = norm(w)
             rmul!(w, inv(H[i+1,i]))
@@ -114,7 +117,7 @@ function fgmres(A, b, restrt::Int64; tol::Real=1e-5, maxiter::Int=200, ifprint=f
                 H[k+1,i] = -sn[k]*H[k,i] + cs[k]*H[k+1,i]
                 H[k,i]   = temp
             end
-	    cs[i], sn[i] = LinearAlgebra.givensAlgorithm(H[i, i], H[i+1, i])
+	        cs[i], sn[i] = LinearAlgebra.givensAlgorithm(H[i, i], H[i+1, i])
             s[i+1] = -sn[i]*s[i]
             s[i]   = cs[i]*s[i]
             H[i,i] = cs[i]*H[i,i] + sn[i]*H[i+1,i]
@@ -127,7 +130,7 @@ function fgmres(A, b, restrt::Int64; tol::Real=1e-5, maxiter::Int=200, ifprint=f
                 for k in 1:i
                     LinearAlgebra.axpy!(y[k],Z[k],x)
                 end
-		break
+		    break
             end
         end
         if err<tol break end
