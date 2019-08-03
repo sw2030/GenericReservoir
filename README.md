@@ -20,7 +20,7 @@ Reservoir Simulator works both on CPU/GPU
 ```
 using GenericReservoir
 m, g = spe10_gpu("spe10data.h5");  ## copy data/spe10data.h5 or use your directory/filename
-testsolve(m, g);
+testsolve(m, g); ## Compilation run
 ```
 ### Simulation
 ```
@@ -28,5 +28,5 @@ max_steps = 200
 initial_dt = 0.005
 initial_t  = 0.0
 
-ReservoirSolve(m, initial_t, initial_dt, g, max_steps);
+ReservoirSolve(m, initial_t, initial_dt, g, max_steps;prec="CPR-LSPS"); ## Supported Preconditioning : CPR-LSPS, CPR-MG, LSPS
 ```

@@ -1,7 +1,11 @@
 function testsolve(m, g)
     println("===================Test run for Compiling===================")
+    println("------------------- Test Run - CPR-LSPS --------------------")
     GenericReservoir.ReservoirSolve(m, 0.0, 0.001, g, 1;prec="CPR-LSPS");
+    println("--------------------- Test Run - LSPS ----------------------")
     GenericReservoir.ReservoirSolve(m, 0.0, 0.001, g, 1;prec="LSPS"); ## Compilation
+    println("-------------------- Test Run - CPR-MG ---------------------")
+    GenericReservoir.ReservoirSolve(m, 0.0, 0.001, g, 1;prec="CPR-MG");
     println("============================================================")
 end
 function savedata(d, fname, Num)
