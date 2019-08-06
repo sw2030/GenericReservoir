@@ -37,7 +37,7 @@ function CPR_LSPS(J, P, E, Jp, Pp, Ep, RES, CPR_args, itercount)
 end
 
 function CPR_MG(J, P, E, Jp, ml, RES, CPR_args, itercount)
-    xp = fgmres(Jp, RES[1:2:end], CPR_args[1];maxiter=CPR_args[2], M=(t->DIA.solve!(zero(t), ml, t, (85,220,60), (1,2,2);maxiter=3)), tol=CPR_args[3])
+    xp = fgmres(Jp, RES[1:2:end], CPR_args[1];maxiter=CPR_args[2], M=(t->DIA.solve!(zero(t), ml, t, (85,220,60), (1,2,2);maxiter=CPR_args[5])), tol=CPR_args[3])
     push!(itercount, xp[2])
     s = zero(RES)
     s[1:2:end] .+= xp[1]

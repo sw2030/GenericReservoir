@@ -1,11 +1,10 @@
-function ReservoirSolve(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;prec="CPR-LSPS", tol_relnorm=1e-3, tol_gmres=1e-2, n_restart=10, n_iter=10, n_prec=7, step_init=0, CPR_tol=1e-1, CPR_iter=5, CPR_prec=(15, 15), CPR_restart=15, iternumtol=7, nl_tol=10, linsolf=fgmres) where {T}
+function ReservoirSolve(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;prec="CPR-LSPS", tol_relnorm=1e-3, tol_gmres=1e-2, n_restart=10, n_iter=10, n_prec=7, step_init=0, CPR_tol=1e-1, CPR_iter=5, CPR_prec=(15, 15), CPR_restart=15, iternumtol=7, nl_tol=10, mg_iter=3, linsolf=fgmres) where {T}
 
-
-	record_p   = zeros(2, n_steps)
-   	psgrid_old = copy(g_guess)
-   	psgrid_new = copy(psgrid_old)
+   	grid_old = copy(g_guess)
+   	grid_new = copy(grid_old)
    	runtime = 0.0
-	prod_rec = []
+	record_p   = zeros(2, n_steps)
+    prod_rec = []
    	itercount_total_c, itercount_total_d, t_init_save, jac_time_total, linsol_time_total, JAC_FUNC_CALL = 0, 0, t_init, 0.0, 0.0, 0
 	#### Print Arguments
 	print_init(tol_relnorm, tol_gmres, n_restart, n_iter, CPR_prec, CPR_restart, CPR_iter, CPR_tol, prec, n_prec)
@@ -15,7 +14,7 @@ function ReservoirSolve(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;pre
        	stepruntime = @elapsed CuArrays.@sync begin
 		
 		#### Initialize Each Steps
-        RES = getresidual(m, Δt, psgrid_new, psgrid_old)
+        RES = getresidual(m, Δt, grid_new, grid_old)
        	norm_RES_save = norm(RES)
        	norm_RES = norm_RES_save
        	println("\nSTEP ", steps+step_init, " | norm_RES : ", norm_RES, " | Δt : ",Δt)
@@ -24,25 +23,25 @@ function ReservoirSolve(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;pre
        	while(norm_RES/norm_RES_save>tol_relnorm)
            	#### In case it is Divergine
     		if ((norm_RES>1e5 && steps>1) || gmresnumcount >= nl_tol || (gmresnumcount>6 && norm_RES>1.0e4)) ### These are the conditions for reducing Δt (Not converged)
-               		copyto!(psgrid_new, psgrid_old)
+               		copyto!(grid_new, grid_old)
                		Δt *= 0.5
                		itercount_div += gmresitercount
                		gmresnumcount, gmresitercount = 0, 0
-               		getresidual!(m, Δt, psgrid_new, psgrid_old, RES)
+               		getresidual!(m, Δt, grid_new, grid_old, RES)
                		norm_RES = norm(RES)
                		println("\nNot Converged, Δt reduced... Δt : ",Δt*2.0, "->", Δt,"\n\nSTEP ", steps+step_init, " | norm_RES : ", norm_RES, " | Δt : ",Δt)
 			end
 
             if prec=="LSPS"
-                dg, j_t, l_t, it_count = LinSolve_LSPS(m, Δt, RES, psgrid_old, psgrid_new, (n_restart, n_iter, tol_gmres), n_prec;linsolve=linsolf)
+                dg, j_t, l_t, it_count = LinSolve_LSPS(m, Δt, RES, grid_old, grid_new, (n_restart, n_iter, tol_gmres), n_prec;linsolve=linsolf)
             elseif prec=="CPR-LSPS"
-                dg, j_t, l_t, it_count = LinSolve_CPR_LSPS(m, Δt, RES, psgrid_old, psgrid_new, 
+                dg, j_t, l_t, it_count = LinSolve_CPR_LSPS(m, Δt, RES, grid_old, grid_new, 
                                                                 (n_restart, n_iter, tol_gmres), 
                                                                 (CPR_restart, CPR_iter, CPR_tol, CPR_prec))
             elseif prec=="CPR-MG"
-                dg, j_t, l_t, it_count = LinSolve_CPR_MG(m, Δt, RES, psgrid_old, psgrid_new,
+                dg, j_t, l_t, it_count = LinSolve_CPR_MG(m, Δt, RES, grid_old, grid_new,
                                                                 (n_restart, n_iter, tol_gmres), 
-                                                                (CPR_restart, CPR_iter, CPR_tol, n_prec))        
+                                                                (CPR_restart, CPR_iter, CPR_tol, n_prec, mg_iter))        
             end
             
             JAC_FUNC_CALL += 1
@@ -52,16 +51,16 @@ function ReservoirSolve(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;pre
             inneritercount += it_count[2]
 		   	
             #### Update and Print
-			LinearAlgebra.axpy!(-1.0, dg, psgrid_new) # Update step
-			getresidual!(m, Δt, psgrid_new, psgrid_old, RES)
-			norm_RES, norm_dg = norm(RES), norm(dg)
+			LinearAlgebra.axpy!(-1.0, dg, grid_new) # Update step
+			getresidual!(m, Δt, grid_new, grid_old, RES)
+    		norm_RES, norm_dg = norm(RES), norm(dg)
 			@show norm_RES, norm_dg
 		end
-		griddiff = psgrid_new - psgrid_old
-	    copyto!(psgrid_old, psgrid_new)
-		push!(prod_rec, oil_production(m, Δt, psgrid_old))
-    	record_p[:, steps] = [t_init+Δt; 2*sum(psgrid_old[1:2:end])/length(psgrid_old)]
-		print_final(steps, t_init, Δt, psgrid_old, record_p, gmresitercount, itercount_div, inneritercount, griddiff)
+		griddiff = grid_new - grid_old
+	    copyto!(grid_old, grid_new)
+		push!(prod_rec, oil_production(m, Δt, grid_old))
+    	record_p[:, steps] = [t_init+Δt; 2*sum(grid_old[1:2:end])/length(grid_old)]
+		print_final(steps, t_init, Δt, grid_old, record_p, gmresitercount, itercount_div, inneritercount, griddiff)
 		t_init += Δt
 		itercount_total_c += gmresitercount
 		itercount_total_d += itercount_div
@@ -82,14 +81,14 @@ function ReservoirSolve(m::Reservoir_Model{T}, t_init, Δt, g_guess, n_steps;pre
 	println("\nTotal Days : ",t_init-t_init_save ," | Total iteration(converge) : ", itercount_total_c, " | Total iteration(diverge) : ", itercount_total_d)
 	println("Total Linsol time : ", linsol_time_total, "sec, Total Jacobian Call time : ", jac_time_total, "sec\nTotal Jacobian Function call : ", JAC_FUNC_CALL)
 	println("Total Runtime : ", runtime, "sec")
-	return psgrid_new, record_p, prod_rec
+	return grid_new, prod_rec
 end
 
-function print_final(steps, t_init, Δt, psgrid_old, record_p, gmresitercount, itercount_div, inneritercount, griddiff)
+function print_final(steps, t_init, Δt, grid_old, record_p, gmresitercount, itercount_div, inneritercount, griddiff)
 	println("CPR Stage 1 iteration : ", inneritercount, "| max dp, ds : ", (maximum(abs.(griddiff[1:2:end])), maximum(abs.(griddiff[2:2:end]))))
     println("GMRES iteration(converge) : ",gmresitercount, " | GMRES iteration(diverge) : ", itercount_div)
-	print("Min p : ", round(minimum(psgrid_old[1:2:end]), sigdigits=6), " | Max p : ", round(maximum(psgrid_old[1:2:end]), sigdigits=6))
-	print("Min s : ", round(minimum(psgrid_old[2:2:end]), sigdigits=6), " | Max s : ", round(maximum(psgrid_old[2:2:end]), sigdigits=6))
+	print("Min p : ", round(minimum(grid_old[1:2:end]), sigdigits=6), " | Max p : ", round(maximum(grid_old[1:2:end]), sigdigits=6), " | ")
+	print("Min s : ", round(minimum(grid_old[2:2:end]), sigdigits=6), " | Max s : ", round(maximum(grid_old[2:2:end]), sigdigits=6))
     println("\nAvg p : ", record_p[2, steps], " | Total time : ", t_init+Δt, " Days")
 end
 
