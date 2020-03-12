@@ -22,7 +22,7 @@ include("test.jl")
 ```
 max_steps = 200
 initial_dt = 0.005
-initial_t  = 0.0
+initial_t  = 0.00
 
 GenericReservoir.Solve_SPE10(model_gpu, initial_t, initial_dt, g_gpu, max_steps);
 ```
