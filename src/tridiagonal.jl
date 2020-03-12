@@ -1,13 +1,18 @@
-using DIA, LinearAlgebra, CuArrays, StaticArrays
+function triLU!(P::SparseMatrixDIA{T,TF,Vector{T}}) where {T,TF}
+    _triLU!(P.diags[1].second, P.diags[2].second, P.diags[3].second, 1, length(P.diags[2].second))
+end
+function triLU_solve!(P, d::Vector{T}, x) where {T}
+    _triLU_solve!(P.diags[1].second, P.diags[2].second, P.diags[3].second, copy(d), x, 1, length(P.diags[2].second))
+end
 
-function triLU!(P)
+function triLU!(P::SparseMatrixDIA{T,TF,CuVector{T}}) where {T,TF}
     if size(P, 1)÷(1122000)==1
 	block_execute!(_triLU!, 32, 1122000, 170, P.diags[1].second, P.diags[2].second, P.diags[3].second)
     else
         block_execute!(_triLU!, 128, 1122000, 85, P.diags[1].second, P.diags[2].second, P.diags[3].second, P.diags[4].second, P.diags[5].second, P.diags[6].second, P.diags[7].second) 
     end
 end
-function triLU_solve!(P, d, x)
+function triLU_solve!(P, d::CuVector{T}, x) where {T}
     if size(P, 1)÷(1122000)==1
         block_execute!(_triLU_solve!, 32, 1122000, 340, P.diags[1].second, P.diags[2].second, P.diags[3].second, copy(d), x)
     else
